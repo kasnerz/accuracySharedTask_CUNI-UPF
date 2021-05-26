@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+
+import numpy as np
+import os
+import logging
+import re
+import json
+import argparse
+import pytorch_lightning as pl
+import torch
+
+import torch.nn as nn
+import torch.nn.functional as F
+# import nltk
+import random
+import sacrebleu
+
+from torch.utils.data import DataLoader, Dataset
+
+from collections import defaultdict
+from datasets import load_dataset, dataset_dict, Dataset
+
+from torch.nn.utils.rnn import pad_sequence
+from utils.config import Label
+from collections import OrderedDict
+
+from transformers import (
+    AdamW,
+    Adafactor,
+    AutoModelForTokenClassification,
+    AutoConfig,
+    AutoTokenizer,
+    get_scheduler
+)
+
+logger = logging.getLogger(__name__)
+
+
+class ErrorCheckerDataModule(pl.LightningDataModule):
+    def __init__(self, args, model_name=None):
+        super().__init__()
+        self.args = args
+        self.model_name = model_name or self.args.model_name
+
+        # disable the "huggingface/tokenizers: The current process just got forked" warning
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name,
+                                                       use_fast=True,
+                                                       add_prefix_space=True)
+
+    def setup(self, stage):
+        data_dir = os.path.join("data", self.args.dataset)
+
+        if stage == "fit":
+            splits = ["train", "dev"]
+        elif stage == "predict":
+            splits = ["dev", "test"]
+
+        self.dataset = {
+            split : load_dataset("json", data_files=os.path.join(data_dir, f"{split}.json"), field="data", split="train") 
+                    for split in splits
+        }
+
+        for split in self.dataset.keys():
+            for column in self.dataset[split].column_names:
+                if column not in ["text", "labels"]:
+                    self.dataset[split] = self.dataset[split].remove_columns(column)
+
+            self.dataset[split] = self.dataset[split].map(
+                self._convert_to_features,
+                batched=True,
+                remove_columns=['labels'],
+            )
+            self.dataset[split].set_format(
+                type="torch",
+                columns=[
+                    "attention_mask", "input_ids", "labels"
+                ])
+
+
+    def _convert_to_features(self, example_batch, indices=None):
+        text = example_batch["text"]
+
+        features = self.tokenizer(text, 
+            is_split_into_words=True, 
+            return_offsets_mapping=True,
+            max_length=self.args.max_length,
+            truncation=True)
+
+        features['labels'] = self._align_labels_with_tokens(
+            features, example_batch['labels'])
+
+        return features
+
+
+    def _align_labels_with_tokens(self, features, labels):
+        aligned_labels_batch = []
+        label_map = Label.label2id()
+        do_not_care_label = -100
+
+        for b in range(len(labels)):
+            aligned_labels = []
+
+            # start caring only for the hypothesis
+            active = False
+            
+            for i, (input_id, word) in enumerate(zip(features["input_ids"][b], features.words(b))):
+                aligned_label = do_not_care_label
+
+                if word is not None:
+                    label = labels[b][word]
+
+                # active = hypothesis, word is None for BOS and EOS, checking if the word changed
+                if active and word is not None and features.words(b)[i-1] != word:
+                    aligned_label = label_map[labels[b][word]]
+
+                if input_id == self.tokenizer.sep_token_id:
+                    active = True
+
+                aligned_labels.append(aligned_label)
+
+            assert len(features['input_ids'][b]) == len(aligned_labels)
+            aligned_labels_batch.append(aligned_labels)
+
+        return aligned_labels_batch
+
+
+    def _is_at_word_boundary(self, sentence, offset):
+        # first token (which is not a special token) or a token for which previous character is a space
+        return (offset[0] == 0
+                and offset[1] != 0) or sentence[offset[0] - 1] == " "
+
+
+    def train_dataloader(self):
+        return DataLoader(self.dataset['train'],
+                          batch_size=self.args.batch_size,
+                          num_workers=self.args.max_threads,
+                          collate_fn=self._pad_sequence,
+                          )
+
+    def val_dataloader(self):
+        return DataLoader(self.dataset['dev'],
+                          batch_size=self.args.batch_size,
+                          num_workers=self.args.max_threads,
+                          collate_fn=self._pad_sequence)
+
+    def test_dataloader(self):
+        return DataLoader(self.dataset['test'],
+                          batch_size=self.args.batch_size,
+                          num_workers=self.args.max_threads,
+                          collate_fn=self._pad_sequence)
+
+
+    def _pad_sequence(self, batch):
+        batch_collated = {}
+
+        paddings = {
+            "input_ids" : self.tokenizer.pad_token_id,
+            "attention_mask" : 0,
+            "labels" : -100
+        }
+
+        for key in ["input_ids", "attention_mask", "labels"]:
+            elems = [x[key] for x in batch]
+            elems_pad = pad_sequence(elems, batch_first=True, padding_value=paddings[key])
+            batch_collated[key] = elems_pad
+
+        return batch_collated
+
+
+
+
+
+class ErrorChecker(pl.LightningModule):
+    def __init__(self, args, **kwargs):
+        super().__init__()
+        self.args = args
+        self.save_hyperparameters()
+
+        config = AutoConfig.from_pretrained(
+                self.args.model_name,
+                num_labels=len(Label),
+                id2label=Label.id2label(),
+                label2id=Label.label2id()
+            )
+
+        self.model = AutoModelForTokenClassification.from_pretrained(args.model_name,
+                                              config=config)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name,
+                                                       use_fast=True,
+                                                       add_prefix_space=True)
+
+    def forward(self, **inputs):
+        return self.model(**inputs)
+
+        # out = self.model(
+        #     input_ids=inputs["input_ids"],
+        #     attention_mask=inputs["attention_mask"],
+        #     labels=inputs["labels"]
+        # )
+        # return {"loss": out["loss"], "logits": out["logits"]}
+
+    def training_step(self, batch, batch_idx):
+        labels = batch["labels"]
+        input_ids = batch["input_ids"]
+        attention_mask = batch["attention_mask"]
+
+        outputs = self(input_ids=input_ids,
+                       attention_mask=attention_mask,
+                       labels=labels)
+        loss = outputs["loss"]
+
+        self.log('loss/train', loss, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        labels = batch["labels"]
+        input_ids = batch["input_ids"]
+        attention_mask = batch["attention_mask"]
+
+        outputs = self(input_ids=input_ids,
+                       attention_mask=attention_mask,
+                       labels=labels)
+        loss = outputs["loss"]
+
+        self.log('loss/val', loss, prog_bar=True)
+
+        return loss
+
+
+    def test_step(self, batch, batch_idx):
+        import pdb; pdb.set_trace()  # breakpoint 732d23d1 //
+
+        out = self.model.generate(batch["input_ids"], 
+            max_length=self.args.max_length,
+            num_beams=1,
+            num_return_sequences=1)
+        
+        out = self.tokenizer.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+        for idx, o in enumerate(out):
+            logger.info(f"[{batch_idx * len(out) + idx}] {o}")
+            self.out_file_handle.write(o + "\n")
+
+
+    def configure_optimizers(self):
+        no_decay = ["bias", "LayerNorm.weight"]
+
+        optimizer_grouped_parameters = [
+            {"params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+             "weight_decay": self.args.weight_decay},
+            {"params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0}
+        ]
+        optimizer = AdamW(optimizer_grouped_parameters,
+                          lr=self.args.learning_rate,
+                          eps=self.args.adam_epsilon,
+                          betas=(self.args.adam_beta1, self.args.adam_beta2))
+
+        total_steps = self.args.max_steps if self.args.max_steps else len(
+            self.train_dataloader()) * self.args.max_epochs
+        warmup_steps = total_steps * self.args.warmup_proportion
+
+        scheduler = get_scheduler(
+            "linear",
+            optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_steps)
+
+        logger.info(f"Using Adam optimizer")
+        logger.info(f"Learning rate: {self.args.learning_rate}")
+        logger.info(f"Total steps: {total_steps}")
+        logger.info(f"Warmup steps: {warmup_steps}")
+
+        scheduler = {
+            'scheduler': scheduler,
+            'interval': 'step',
+            'frequency': 1
+        }
+        return [optimizer], [scheduler]
+
+
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = argparse.ArgumentParser(parents=[parent_parser],
+                                         add_help=False)
+        parser.add_argument("--learning_rate", default=5e-5, type=float)
+        parser.add_argument("--adam_epsilon", default=1e-8, type=float)
+        parser.add_argument("--adam_beta1", default=0.9, type=float)
+        parser.add_argument("--adam_beta2", default=0.997, type=float)
+        parser.add_argument("--warmup_proportion", default=0.1, type=float)
+        parser.add_argument("--weight_decay", default=0.00, type=float)
+
+        return parser
+
+
+
+class DAInferenceModule:
+    def __init__(self, args, model_path):
+        self.args = args
+        self.model = DAdapter.load_from_checkpoint(model_path)
+        self.model.freeze()
+        logger.info(f"Loaded model from {model_path}")
+
+        self.model_name = self.model.model.name_or_path
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name,
+                                                       use_fast=True)
+
+        add_special_tokens(self.tokenizer, None, dataset="", experiment=self.args.experiment)
+
+
+    def predict(self, s, beam_size=1):
+        inputs = self.tokenizer(s, return_tensors='pt')
+
+        if hasattr(self.args, "gpus") and self.args.gpus > 0:
+            self.model.cuda()
+            for key in inputs.keys():
+                inputs[key] = inputs[key].cuda()
+        else:
+            logger.warning("Not using GPU")
+
+        return self.generate(inputs["input_ids"], beam_size)
+
+
+    def generate(self, input_ids, beam_size):
+        out = self.model.model.generate(input_ids, 
+            max_length=self.args.max_length,
+            num_beams=beam_size,
+            num_return_sequences=beam_size
+        )
+
+        sentences = self.tokenizer.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            
+        return sentences
