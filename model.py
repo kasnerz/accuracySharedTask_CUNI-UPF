@@ -15,6 +15,7 @@ import torch.nn.functional as F
 import random
 import sacrebleu
 
+from nltk import word_tokenize
 from torch.utils.data import DataLoader, Dataset
 
 from collections import defaultdict
@@ -124,12 +125,6 @@ class ErrorCheckerDataModule(pl.LightningDataModule):
             aligned_labels_batch.append(aligned_labels)
 
         return aligned_labels_batch
-
-
-    def _is_at_word_boundary(self, sentence, offset):
-        # first token (which is not a special token) or a token for which previous character is a space
-        return (offset[0] == 0
-                and offset[1] != 0) or sentence[offset[0] - 1] == " "
 
 
     def train_dataloader(self):
@@ -296,40 +291,56 @@ class ErrorChecker(pl.LightningModule):
 
 
 
-class DAInferenceModule:
+class ErrorCheckerInferenceModule:
     def __init__(self, args, model_path):
         self.args = args
-        self.model = DAdapter.load_from_checkpoint(model_path)
+        self.model = ErrorChecker.load_from_checkpoint(model_path)
         self.model.freeze()
         logger.info(f"Loaded model from {model_path}")
 
         self.model_name = self.model.model.name_or_path
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name,
-                                                       use_fast=True)
-
-        add_special_tokens(self.tokenizer, None, dataset="", experiment=self.args.experiment)
-
-
-    def predict(self, s, beam_size=1):
-        inputs = self.tokenizer(s, return_tensors='pt')
-
+                                                       use_fast=True,
+                                                       add_prefix_space=True)
         if hasattr(self.args, "gpus") and self.args.gpus > 0:
             self.model.cuda()
-            for key in inputs.keys():
-                inputs[key] = inputs[key].cuda()
         else:
             logger.warning("Not using GPU")
 
-        return self.generate(inputs["input_ids"], beam_size)
 
 
-    def generate(self, input_ids, beam_size):
-        out = self.model.model.generate(input_ids, 
-            max_length=self.args.max_length,
-            num_beams=beam_size,
-            num_return_sequences=beam_size
-        )
+    def predict(self, text, hyp, beam_size=1):
+        text_tokens = word_tokenize(text)
+        hyp_tokens = word_tokenize(hyp)
 
-        sentences = self.tokenizer.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-            
-        return sentences
+        tokens = text_tokens + [self.tokenizer.sep_token] + hyp_tokens
+
+        inputs = self.tokenizer(tokens, 
+                        return_tensors='pt',
+                        return_offsets_mapping=True,
+                        max_length=self.args.max_length,
+                        truncation=True,
+                        is_split_into_words=True)
+
+        if hasattr(self.args, "gpus") and self.args.gpus > 0:
+            for key in inputs.keys():
+                inputs[key] = inputs[key].cuda()
+
+        if beam_size > 1:
+            logger.warn("TODO: implement beam")
+
+        logits = self.model.model(input_ids=inputs["input_ids"]).logits
+        predictions = np.argmax(logits.cpu().numpy(), axis=2)[0]
+
+        id2label = Label.id2label()
+
+        offset_mapping = inputs["offset_mapping"][0]
+        word_indices = [idx for idx, offset in enumerate(offset_mapping) if offset[0]==1]
+        hyp_word_indices = word_indices[-len(hyp_tokens):]
+        hyp_labels = predictions[hyp_word_indices]
+
+        hyp_tagged_tokens = [(token, id2label[label]) for token, label in zip(hyp_tokens, hyp_labels)]
+
+        return hyp_tagged_tokens
+
+

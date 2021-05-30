@@ -8,6 +8,9 @@ import random
 import re
 
 from utils.json_encoder import CompactJSONEncoder
+from utils.config import Label
+
+from nltk import word_tokenize
 
 from transformers import AutoTokenizer
 import torch
@@ -49,31 +52,31 @@ class Generator:
     def generate(self, games, split):
         data = []
 
-        LABEL_OK = "O"
-        LABEL_NUM = "NUMBER"
-
         for i, game in enumerate(games):
             player = random.choice(list(game["player"].keys()))
             gt = random.sample(game["player"][player], min(len(game["player"][player]), 15))
             sent = random.sample(gt, min(len(gt), 3))
+
+
+            import pdb; pdb.set_trace()  # breakpoint 2df55309 //
 
             gt_tokens = " ".join(gt).split()
             sep_token = [self.tokenizer.sep_token]
             sent_tokens = " ".join(sent).split()
             modified_sent_tokens = []
 
-            gt_labels = [LABEL_OK for _ in range(len(gt_tokens)+1)] # also for the sep_token
+            gt_labels = [Label.O for _ in range(len(gt_tokens)+1)] # also for the sep_token
             modified_sent_labels = []
             modification_rate = 0.5
 
             for token in sent_tokens:
-                label = LABEL_OK
+                label = Label.O
                 if self.is_number(token):
                     if random.random() < modification_rate:
                         orig_token = token
                         token = self.modify_number(token)
                         logger.info(f"{orig_token} -> {token}")
-                        label = LABEL_NUM
+                        label = Label.NUMBER
 
                 modified_sent_labels.append(label)
                 modified_sent_tokens.append(token)

@@ -28,6 +28,8 @@ def parse_args(args=None):
         help="Batch size for finetuning the model")
     parser.add_argument("--output_dir", type=str, default="experiments",
         help="Output directory")
+    parser.add_argument("--checkpoint_name", type=str, default="model",
+        help="Name of the checkpoint (default='model')")
     parser.add_argument("--experiment", type=str, required=True,
         help="Experiment name used for naming the experiment directory")
     parser.add_argument("--max_length", type=int, default=512,
@@ -61,6 +63,7 @@ if __name__ == '__main__':
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=ckpt_output_dir,
+        filename=args.checkpoint_name,
         save_top_k=1,
         verbose=True,
         monitor=monitor,
