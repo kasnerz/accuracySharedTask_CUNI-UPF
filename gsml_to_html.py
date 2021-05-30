@@ -40,14 +40,14 @@ HTML_HEADER = """<!DOCTYPE html>
     .incorrect {
           display: inline-block;
           color: #800;
-          background: #fa5;
+          background: #db9bf2;
           vertical-align: middle;
           line-height: 1em;
     }
     .extra {
           display: inline-block;
           color: #800;
-          background: #db9bf2;
+          background: #fa5;
           vertical-align: middle;
           line-height: 1em;
     }
@@ -111,7 +111,7 @@ def main(text_dir, gsml_csv, out_csv, games_csv):
             if annot[0] is None and annot[1] is None:
                 continue
             elif annot[0] is not None and annot[1] is None:
-                text[i] = '<div class="missed">' + '<span class="type">' + "h:" + annot[0] + '</span>' + text[i] + "</div>"
+                text[i] = '<div class="missed">' + '<span class="type">' + "r:" + annot[0] + '</span>' + text[i] + "</div>"
             elif annot[0] is None and annot[1] is not None:
                 text[i] = '<div class="extra">' + '<span class="type">' + "h:"  + annot[1] + '</span>' + text[i] + "</div>"
             else:
