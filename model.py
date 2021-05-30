@@ -309,9 +309,13 @@ class ErrorCheckerInferenceModule:
 
 
 
-    def predict(self, text, hyp, beam_size=1):
+    def predict(self, text, hyp, beam_size=1, is_hyp_tokenized=False):
         text_tokens = word_tokenize(text)
-        hyp_tokens = word_tokenize(hyp)
+
+        if is_hyp_tokenized:
+            hyp_tokens = hyp.split()
+        else:
+            hyp_tokens = word_tokenize(hyp)
 
         tokens = text_tokens + [self.tokenizer.sep_token] + hyp_tokens
 

@@ -1,5 +1,8 @@
+#!/usr/bin/env python3
+
 import csv
 import json
+import sys
 import pprint
 from copy import deepcopy
 pp = pprint.PrettyPrinter(indent=4)
@@ -136,6 +139,10 @@ def calculate_recall_and_precision(gsml_filename, submitted_filename, categories
 
   return recall, precision, mean_overlap
 
+
+input_file = sys.argv[1]
+
+
 """
   Check all catogories combined, as well as each category individually
 """
@@ -145,7 +152,7 @@ for categories in categories_list:
   category_display_str = ', '.join(categories)
   print(f'\n-- GSML for categories: {category_display_str}')
 
-  recall, precision, mean_overlap = calculate_recall_and_precision('gsml.csv', 'submitted_gsml.csv', categories)
+  recall, precision, mean_overlap = calculate_recall_and_precision('gsml.csv', input_file, categories)
   print(f'GSML vs example: recall => {recall}, precision => {precision}, overlap => {mean_overlap}')
 
   recall, precision, mean_overlap = calculate_recall_and_precision('gsml.csv', 'gsml.csv', categories)
