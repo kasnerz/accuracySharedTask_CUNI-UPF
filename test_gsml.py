@@ -1,6 +1,11 @@
+#!/usr/bin/env python3
+
+
 import csv
 import json
 import glob
+
+import sys
 
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
@@ -85,7 +90,10 @@ def sentence_to_tokens(sentence):
 # Check that the sentencization works, and that only single period characters are sentence delimiting
 # - Compares the texts in games.csv with the WebAnno export (all tokens, not just errors)
 token_matches = 0
-with open('games.csv', newline='') as csvfile:
+gsml_file = sys.argv[1]
+
+
+with open(gsml_file, newline='') as csvfile:
   json_lines = []
 
   reader = csv.reader(csvfile, delimiter=',', quotechar='"')

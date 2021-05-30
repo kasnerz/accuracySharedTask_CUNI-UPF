@@ -25,9 +25,6 @@ logger = logging.getLogger(__name__)
 
 tokenizer = tokenizer.Tokenizer()
 
-def fetch_texts(sentence):
-    return tokenizer.detokenize(sentence)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -83,24 +80,31 @@ if __name__ == "__main__":
 
         for row in reader:
             file = row[0]
-            test_id = row[3]
+            test_id = int(row[3])
             text = row[4]
 
-            import pdb; pdb.set_trace()  # breakpoint 502069af //
-            
-            game = test_games[test_id]
+            # misgenerated game
+            assert test_id != 515
+
+            if test_id >= 515:
+                test_id -= 1
+
+            game_data = test_games[test_id]
             logger.info(f"Processing {file}")
             sentences = sent_tokenize(text)
+            doc_token_idx = 0
 
             for sent_idx, sentence in enumerate(sentences):
-                text = fetch_texts(sentence)
+                text = g.fetch_text(sentence=sentence, game_data=game_data)
                 hyp = sentence
                 out = ecim.predict(text=text, hyp=hyp, beam_size=args.beam_size, is_hyp_tokenized=True)
 
                 for token_idx, (token, tag) in enumerate(out):
+                    doc_token_idx += 1
                     if tag == Label.O.name:
                         continue
 
+                    logger.info(f"{tag} {token}")
                     error_id += 1
                     out_row = [
                         file + ".txt",
@@ -109,8 +113,8 @@ if __name__ == "__main__":
                         token,
                         token_idx,
                         token_idx,
-                        "",
-                        "",
+                        doc_token_idx,
+                        doc_token_idx,
                         tag,
                         "",
                         ""

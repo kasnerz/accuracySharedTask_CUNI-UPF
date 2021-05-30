@@ -49,6 +49,16 @@ class Generator:
 
         return str(modified_num) + suffix
 
+    def fetch_text(self, sentence, game_data):
+        texts = game_data.get_category("game")
+        text = " ".join(texts)
+
+        text_subwords = len(self.tokenizer.encode(" ".join(texts)))
+        logger.info(f"Tokenized text length: {text_subwords}")
+
+        return text
+
+
     def generate(self, games, split):
         data = []
 
@@ -57,12 +67,9 @@ class Generator:
             gt = random.sample(game["player"][player], min(len(game["player"][player]), 15))
             sent = random.sample(gt, min(len(gt), 3))
 
-
-            import pdb; pdb.set_trace()  # breakpoint 2df55309 //
-
-            gt_tokens = " ".join(gt).split()
+            gt_tokens = word_tokenize(" ".join(gt))
             sep_token = [self.tokenizer.sep_token]
-            sent_tokens = " ".join(sent).split()
+            sent_tokens = word_tokenize(" ".join(sent))
             modified_sent_tokens = []
 
             gt_labels = [Label.O for _ in range(len(gt_tokens)+1)] # also for the sep_token

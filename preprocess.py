@@ -10,7 +10,30 @@ import re
 from collections import defaultdict
 
 
-def identify_entity(sent):
+class GameData:
+    def __init__(self):
+        self.entities = defaultdict(list)
+        self.texts = []
+
+    def get_all(self):
+        return [x[0] for x in self.texts]
+
+    def get_entity(self, entity):
+        return self.entities[entity]
+
+    def get_category(self, category):
+        return [x[0] for x in self.texts if x[1] == category]
+
+    def add_text(self, text, category):
+        entities = identify_entities(text)
+
+        for entity in entities:
+            self.entities[entity].append(text)
+
+        self.texts.append((text, category))
+
+
+def identify_entities(sent):
     entity = []
 
     for token in sent.split():
@@ -19,13 +42,13 @@ def identify_entity(sent):
         else:
             break
 
-    return " ".join(entity)
+    return [" ".join(entity)]
 
 
 
 def load_games(template_path, split="test"):
     games = []
-    game = None
+    game_data = None
     category = None
     entity = None
 
@@ -33,9 +56,9 @@ def load_games(template_path, split="test"):
         for line in f.readlines():
             line = line.rstrip("\n")
             if line.startswith("=== Game"):
-                if game:
-                    games.append(game)
-                game = defaultdict(lambda: defaultdict(list))
+                if game_data:
+                    games.append(game_data)
+                game_data = GameData()
             elif "Game Data" in line:
                 category = "game"
             elif "Player Data" in line:
@@ -45,10 +68,9 @@ def load_games(template_path, split="test"):
             elif line == "" or category is None:
                 continue
             else:
-                entity = identify_entity(line)
-                game[category][entity].append(line)
+                game_data.add_text(line, category)
 
-    games.append(game)
+    games.append(game_data)
     return games
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, datefmt='%H:%M:%S')
