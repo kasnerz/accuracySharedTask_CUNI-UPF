@@ -225,19 +225,18 @@ class ErrorChecker(pl.LightningModule):
         return loss
 
 
-    def test_step(self, batch, batch_idx):
-        import pdb; pdb.set_trace()  # breakpoint 732d23d1 //
+    # def test_step(self, batch, batch_idx):
 
-        out = self.model.generate(batch["input_ids"], 
-            max_length=self.args.max_length,
-            num_beams=1,
-            num_return_sequences=1)
+    #     out = self.model.generate(batch["input_ids"], 
+    #         max_length=self.args.max_length,
+    #         num_beams=1,
+    #         num_return_sequences=1)
         
-        out = self.tokenizer.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+    #     out = self.tokenizer.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-        for idx, o in enumerate(out):
-            logger.info(f"[{batch_idx * len(out) + idx}] {o}")
-            self.out_file_handle.write(o + "\n")
+    #     for idx, o in enumerate(out):
+    #         logger.info(f"[{batch_idx * len(out) + idx}] {o}")
+    #         self.out_file_handle.write(o + "\n")
 
 
     def configure_optimizers(self):

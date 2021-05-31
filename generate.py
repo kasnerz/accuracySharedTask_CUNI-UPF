@@ -6,14 +6,14 @@ import logging
 import json
 import random
 import re
+import torch
 
 from utils.json_encoder import CompactJSONEncoder
 from utils.config import Label
-
+from utils.sentence_scorer import SentenceScorer
 from nltk import word_tokenize
 
 from transformers import AutoTokenizer
-import torch
 
 from collections import defaultdict
 from preprocess import load_games
@@ -26,6 +26,7 @@ class Generator:
     def __init__(self, args):
         self.args = args
         self.tokenizer = AutoTokenizer.from_pretrained('roberta-base', use_fast=True, add_prefix_space=True)
+        self.ss = SentenceScorer()
 
     def is_number(self, token):
         if token.isnumeric():
@@ -50,10 +51,20 @@ class Generator:
         return str(modified_num) + suffix
 
     def fetch_text(self, sentence, game_data):
-        texts = game_data.get_category("game")
-        text = " ".join(texts)
+        texts = game_data.get_all()
+        scored_sentences = self.ss.score(sentence=sentence, texts=texts)
 
-        text_subwords = len(self.tokenizer.encode(" ".join(texts)))
+        # for i,(txt, score) in enumerate(scored_sentences[:30]):
+        #     print(f"{i}\t{float(score):.3f}\t{txt}")
+        
+        text = " ".join([x[0] for x in scored_sentences][:15])
+
+        # print(sentence)
+        # print("-----------")
+        # print(text)
+        # print("===========")
+
+        text_subwords = len(self.tokenizer.encode(text))
         logger.info(f"Tokenized text length: {text_subwords}")
 
         return text

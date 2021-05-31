@@ -32,7 +32,7 @@ if __name__ == "__main__":
         help="Base directory of the experiment.")
     parser.add_argument("--input_file", default="games.csv", type=str,
         help="Input directory.")
-    parser.add_argument("--output_filename", default="out.csv", type=str,
+    parser.add_argument("--out_fname", default="out.csv", type=str,
         help="Output file.")
     parser.add_argument("--experiment", type=str, required=True,
         help="Experiment name.")
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     test_games = load_games(args.templates, "test")
 
-    output_path = os.path.join(args.exp_dir, args.experiment, args.output_filename)
+    output_path = os.path.join(args.exp_dir, args.experiment, args.out_fname)
     f_out = open(output_path, "w")
 
     f_out.write(
