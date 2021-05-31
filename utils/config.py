@@ -5,6 +5,7 @@ from enum import Enum
 class Label(Enum):
     O = 0           # OK
     NUMBER = 1      # number error
+    NAME = 2        # name error
 
     @classmethod
     def label2id(cls):

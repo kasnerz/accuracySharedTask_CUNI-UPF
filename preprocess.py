@@ -13,6 +13,8 @@ from collections import defaultdict
 class GameData:
     def __init__(self):
         self.entities = defaultdict(list)
+        self.teams = set()
+        self.players = set()
         self.texts = []
 
     def get_all(self):
@@ -20,6 +22,12 @@ class GameData:
 
     def get_entity(self, entity):
         return self.entities[entity]
+
+    def get_teams(self):
+        return self.teams
+
+    def get_players(self):
+        return self.players
 
     def get_category(self, category):
         return [x[0] for x in self.texts if x[1] == category]
@@ -29,6 +37,11 @@ class GameData:
 
         for entity in entities:
             self.entities[entity].append(text)
+
+            if category in ["game", "team"]:
+                self.teams.add(entity)
+            elif category == "player":
+                self.players.add(entity)
 
         self.texts.append((text, category))
 

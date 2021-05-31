@@ -16,6 +16,8 @@ from model import ErrorCheckerInferenceModule
 from nltk import sent_tokenize
 from utils.config import Label
 from utils import tokenizer
+from utils.sentence_scorer import SentenceScorer
+
 
 from preprocess import load_games
 from generate import Generator
@@ -24,6 +26,103 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 logger = logging.getLogger(__name__)
 
 tokenizer = tokenizer.Tokenizer()
+
+
+class Decoder:
+    def __init__(self, args):
+        self.args = args
+        ec_model_path = os.path.join(args.exp_dir, args.experiment, args.checkpoint)
+
+        self.ec = ErrorCheckerInferenceModule(args, model_path=ec_model_path)
+        self.ss = SentenceScorer()
+
+
+    def fetch_text(self, sentence, game_data):
+        texts = game_data.get_all()
+        scored_sentences = self.ss.score(sentence=sentence, texts=texts)
+
+        # for i,(txt, score) in enumerate(scored_sentences[:30]):
+        #     print(f"{i}\t{float(score):.3f}\t{txt}")
+
+        text = " ".join([x[0] for x in scored_sentences][:15])
+
+        # print(sentence)
+        # print("-----------")
+        # print(text)
+        # print("===========")
+
+        # text_subwords = len(self.tokenizer.encode(text))
+        # logger.info(f"Tokenized text length: {text_subwords}")
+
+        return text
+
+
+    def process_input_file(self, row, test_games, f_out):
+        file = row[0]
+        test_id = int(row[3])
+        text = row[4]
+
+        # misgenerated game
+        assert test_id != 515
+
+        if test_id >= 515:
+            test_id -= 1
+
+        game_data = test_games[test_id]
+        logger.info(f"Processing {file}")
+        sentences = sent_tokenize(text)
+        doc_token_idx = 0
+
+        for sent_idx, sentence in enumerate(sentences):
+            text = self.fetch_text(sentence=sentence, game_data=game_data)
+            hyp = sentence
+            out = self.ec.predict(text=text, hyp=hyp, beam_size=self.args.beam_size, is_hyp_tokenized=True)
+
+            for token_idx, (token, tag) in enumerate(out):
+                doc_token_idx += 1
+
+                # skip if OK
+                if tag == Label.O.name:
+                    continue
+
+                logger.info(f"{tag} {token}")
+                self.error_id += 1
+                out_row = [
+                    file + ".txt",
+                    sent_idx,
+                    self.error_id,
+                    token,
+                    token_idx,
+                    token_idx,
+                    doc_token_idx,
+                    doc_token_idx,
+                    tag,
+                    "",
+                    ""
+                ]
+                out_row = [f'"{column}"' for column in out_row if column is not None]
+                f_out.write(",".join(out_row) + "\n")
+
+
+    def decode(self):
+        self.error_id = 0
+        test_games = load_games(args.templates, "test")
+        output_path = os.path.join(args.exp_dir, args.experiment, args.out_fname)
+        
+        with open(args.input_file) as f_in, open(output_path, "w") as f_out:
+            reader = csv.reader(f_in, delimiter=',', quotechar='"')
+            # skip header
+            header = next(reader)
+
+            f_out.write(
+                '"TEXT_ID","SENTENCE_ID","ANNOTATION_ID","TOKENS","SENT_TOKEN_START",'
+                '"SENT_TOKEN_END","DOC_TOKEN_START","DOC_TOKEN_END","TYPE","CORRECTION","COMMENT"\n'
+            )
+
+            for row in reader:
+                self.process_input_file(row, test_games, f_out)
+                
+
 
 
 if __name__ == "__main__":
@@ -58,68 +157,6 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     torch.set_num_threads(args.max_threads)
 
-    model_path = os.path.join(args.exp_dir, args.experiment, args.checkpoint)
-    ecim = ErrorCheckerInferenceModule(args, model_path=model_path)
+    d = Decoder(args)
 
-    g = Generator(args)
-
-    test_games = load_games(args.templates, "test")
-
-    output_path = os.path.join(args.exp_dir, args.experiment, args.out_fname)
-    f_out = open(output_path, "w")
-
-    f_out.write(
-        '"TEXT_ID","SENTENCE_ID","ANNOTATION_ID","TOKENS","SENT_TOKEN_START","SENT_TOKEN_END","DOC_TOKEN_START","DOC_TOKEN_END","TYPE","CORRECTION","COMMENT"\n'
-    )
-
-    with open(args.input_file) as f_in:
-        reader = csv.reader(f_in, delimiter=',', quotechar='"')
-        # skip header
-        header = next(reader)
-        error_id = 0
-
-        for row in reader:
-            file = row[0]
-            test_id = int(row[3])
-            text = row[4]
-
-            # misgenerated game
-            assert test_id != 515
-
-            if test_id >= 515:
-                test_id -= 1
-
-            game_data = test_games[test_id]
-            logger.info(f"Processing {file}")
-            sentences = sent_tokenize(text)
-            doc_token_idx = 0
-
-            for sent_idx, sentence in enumerate(sentences):
-                text = g.fetch_text(sentence=sentence, game_data=game_data)
-                hyp = sentence
-                out = ecim.predict(text=text, hyp=hyp, beam_size=args.beam_size, is_hyp_tokenized=True)
-
-                for token_idx, (token, tag) in enumerate(out):
-                    doc_token_idx += 1
-                    if tag == Label.O.name:
-                        continue
-
-                    logger.info(f"{tag} {token}")
-                    error_id += 1
-                    out_row = [
-                        file + ".txt",
-                        sent_idx,
-                        error_id,
-                        token,
-                        token_idx,
-                        token_idx,
-                        doc_token_idx,
-                        doc_token_idx,
-                        tag,
-                        "",
-                        ""
-                    ]
-                    out_row = [f'"{column}"' for column in out_row if column is not None]
-                    f_out.write(",".join(out_row) + "\n")
-
-    f_out.close()
+    d.decode()
