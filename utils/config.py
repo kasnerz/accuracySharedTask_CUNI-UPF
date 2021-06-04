@@ -4,8 +4,12 @@ from enum import Enum
 
 class Label(Enum):
     O = 0           # OK
-    NUMBER = 1      # number error
-    NAME = 2        # name error
+    NUMBER = 1      
+    NAME = 2        
+    WORD = 3       
+    NOT_CHECKABLE = 4   
+    CONTEXT = 5   
+    OTHER = 6   
 
     @classmethod
     def label2id(cls):

@@ -37,44 +37,27 @@ class Decoder:
         self.ss = SentenceScorer()
 
 
-    def fetch_text(self, sentence, game_data):
-        texts = game_data.get_all()
-        scored_sentences = self.ss.score(sentence=sentence, texts=texts)
-
-        # for i,(txt, score) in enumerate(scored_sentences[:30]):
-        #     print(f"{i}\t{float(score):.3f}\t{txt}")
-
-        text = " ".join([x[0] for x in scored_sentences][:15])
-
-        # print(sentence)
-        # print("-----------")
-        # print(text)
-        # print("===========")
-
-        # text_subwords = len(self.tokenizer.encode(text))
-        # logger.info(f"Tokenized text length: {text_subwords}")
-
-        return text
-
-
     def process_input_file(self, row, test_games, f_out):
         file = row[0]
-        test_id = int(row[3])
+        test_idx = int(row[3])
         text = row[4]
 
         # misgenerated game
-        assert test_id != 515
+        assert test_idx != 515
 
-        if test_id >= 515:
-            test_id -= 1
+        if test_idx >= 515:
+            test_idx -= 1
 
-        game_data = test_games[test_id]
+        game_idx, game_data = test_games[test_idx]
+
+        # assert game_idx == test_idx, f"{game_idx} != {test_idx}"
+
         logger.info(f"Processing {file}")
         sentences = sent_tokenize(text)
         doc_token_idx = 0
 
         for sent_idx, sentence in enumerate(sentences):
-            text = self.fetch_text(sentence=sentence, game_data=game_data)
+            text = self.ss.fetch_text(sentence=sentence, game_data=game_data)
             hyp = sentence
             out = self.ec.predict(text=text, hyp=hyp, beam_size=self.args.beam_size, is_hyp_tokenized=True)
 

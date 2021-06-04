@@ -11,7 +11,8 @@ import pytorch_lightning as pl
 
 from pprint import pprint as pp
 from model import ErrorCheckerInferenceModule
-
+from preprocess import load_games
+from utils.sentence_scorer import SentenceScorer
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -35,6 +36,10 @@ if __name__ == "__main__":
         help="Maximum number of tokens per example")
     parser.add_argument("--checkpoint", type=str, default="model.ckpt",
         help="Override the default checkpoint name 'model.ckpt'.")
+    parser.add_argument("--game_idx", default=None, type=int,
+        help="Retrieve the references automatically from game_id.")
+    parser.add_argument("--templates", type=str, default="generated/simple_templates",
+        help="Path to generated templates.")
     args = parser.parse_args()
 
     logger.info(args)
@@ -46,10 +51,32 @@ if __name__ == "__main__":
     model_path = os.path.join(args.exp_dir, args.experiment, args.checkpoint)
     ecim = ErrorCheckerInferenceModule(args, model_path=model_path)
 
-    text = input("[Text]: ")
+    game_idx = args.game_idx
+
+    
+
+
+    if game_idx is None:
+        text = input("[Text]: ")
+    else:
+        ss = SentenceScorer()
+        test_games = load_games(args.templates, "test")
+
+        # misgenerated game
+        assert game_idx != 515
+
+        if game_idx >= 515:
+            game_idx -= 1
+
+        _, game_data = test_games[game_idx]
+
 
     while True:
         hyp = input("[Hyp]: ")
+
+        if game_idx is not None:
+            text = ss.fetch_text(hyp, game_data, cnt=15)
+            print("[Text-R]:", text)
 
         out = ecim.predict(text=text, hyp=hyp, beam_size=args.beam_size)
         print("[Out]:")

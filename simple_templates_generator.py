@@ -31,6 +31,8 @@ import codecs
 import numbers
 from pathlib import Path
 
+import datetime
+
 
 #template_file_path = Path(Path.home(), 'Google Drive', 'TALN', 'Simon', 'Programs', 'Python', 'Generation', 'CONNEXIONs-input-template.json')
 
@@ -76,6 +78,14 @@ def compareTeamNumbers(dico_numbers, team_data, homeStatCat, visStatCat):
         # dico_numbers['score'] = str(visStatCat)+'-'+str(homeStatCat)
         # dico_numbers['score_difference'] = int(visStatCat) - int(homeStatCat)
     
+def convert_to_date(date_str):
+    m, d, y = date_str.split("_")
+    date = datetime.datetime(int("20"+y), int(m), int(d))
+
+    # task contains only weekdays
+    new_date_str = date.strftime('%A')
+
+    return new_date_str
 
 class PlayerData:
     def __init__(self, json_dict, x, player_id):
@@ -461,7 +471,7 @@ os.makedirs('out')
 
 def create_json_template (file_list):
     for json_file_path in file_list:
-
+        out = "generated/simple_templates"
         filename = json_file_path.split('/')[-1].split('.')[0]
         filename_out = 'log_'+filename+'.txt'
         print('Writing file '+filename_out)
@@ -507,7 +517,7 @@ def create_json_template (file_list):
         for game in list_games:
             write_log('\n=== Game #'+str(count_games)+' ===', log_file)
             write_log('--- Game Data ---', log_file)
-            write_log(game.home_full_name+' hosted '+game.vis_full_name+' on '+game.day+'.', log_file)
+            write_log(game.home_full_name+' hosted '+game.vis_full_name+' on '+convert_to_date(game.day)+'.', log_file)
             write_log(game.result_game['winning_team']+' beat '+game.result_game['losing_team']+' by '+str(game.result_game['score_difference'])+' points ('+game.result_game['score']+').', log_file)
             if game.comparison_AST['score_difference'] == 0:
                 write_log(game.comparison_AST['winning_team']+' and '+str(game.comparison_AST['losing_team'])+' had the same number of assists ('+str(game.comparison_AST['count_winning_team'])+').', log_file)
@@ -816,6 +826,9 @@ def create_json_template (file_list):
                 fo.write(game.text+'\n')
                 y += 1
             fo.close()
+
+
+
 
 if __name__ == "__main__":
     create_json_template(file_list)

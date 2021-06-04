@@ -10,6 +10,9 @@ import re
 from collections import defaultdict
 
 
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, datefmt='%H:%M:%S')
+logger = logging.getLogger(__name__)
+
 class GameData:
     def __init__(self):
         self.entities = defaultdict(list)
@@ -65,12 +68,22 @@ def load_games(template_path, split="test"):
     category = None
     entity = None
 
+    skipped_ids = []
+    game_id = 0
+
     with open(template_path + f"/log_{split}.txt") as f:
         for line in f.readlines():
             line = line.rstrip("\n")
+            skipped_id = re.search(r"Input #(\d+) not processed", line)
+
             if line.startswith("=== Game"):
                 if game_data:
-                    games.append(game_data)
+                    games.append((int(game_id), game_data))
+                    game_id += 1
+
+                    while game_id in skipped_ids:
+                        logger.info(f"Skipping id {game_id}")
+                        game_id += 1
                 game_data = GameData()
             elif "Game Data" in line:
                 category = "game"
@@ -78,16 +91,16 @@ def load_games(template_path, split="test"):
                 category = "player"
             elif "Team Data" in line:
                 category = "team"
+            elif skipped_id is not None:
+                skipped_ids.append(int(skipped_id.group(1)))
             elif line == "" or category is None:
                 continue
             else:
                 game_data.add_text(line, category)
 
-    games.append(game_data)
+    games.append((int(game_id),game_data))
     return games
 
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, datefmt='%H:%M:%S')
-logger = logging.getLogger(__name__)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

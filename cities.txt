@@ -1,0 +1,30 @@
+Orlando
+Toronto
+New Orleans
+Chicago
+Minnesota
+Phoenix
+Milwaukee
+Oklahoma City
+Sacramento
+Los Angeles
+Portland
+New York
+Boston
+Utah
+Denver
+Memphis
+Dallas
+Charlotte
+Indiana
+Atlanta
+Golden State
+Cleveland
+San Antonio
+Brooklyn
+Miami
+Detroit
+Philadelphia
+LA
+Houston
+Washington
