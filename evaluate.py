@@ -1,5 +1,8 @@
+#!/usr/bin/env python3
+
 import csv
 import json
+import sys
 import pprint
 import sys
 import yaml
@@ -76,7 +79,7 @@ def create_mistake_dict(filename, categories, token_lookup):
       if sent_given and doc_given:
         tokenization_mode = consistent_tokenization(tokenization_mode, 'BOTH')
         # Check mapping from sent to doc tokenization matches our token_lookup
-        assert doc_start_idx == token_lookup['sent_to_doc'][text_id][sentence_id][sent_start_idx]
+        assert doc_start_idx == token_lookup['sent_to_doc'][text_id][sentence_id][sent_start_idx], f"{doc_start_idx}, {token_lookup['sent_to_doc'][text_id][sentence_id][sent_start_idx]}"
         assert doc_end_idx == token_lookup['sent_to_doc'][text_id][sentence_id][sent_end_idx]
         # And doc to sent
         assert sentence_id == token_lookup['doc_to_sent'][text_id][doc_start_idx]['sentence_id']
@@ -285,9 +288,6 @@ def format_result_value(value, dcp=3):
 
 
 
-
-
-
 # CLI args
 parser.add_argument('--gsml', type=str,
                     help='The GSML file path (CSV)')
@@ -314,18 +314,40 @@ print(f'comparing GSML => "{gsml_filename}" to submission => "{submitted_filenam
 # Check all catogories combined, as well as each category individually
 categories_list = [all_categories()] + [[x] for x in all_categories()]
 
+
+metrics = ["recall", "precision", "token_recall", "token_precision"]
+res_to_print = {m : [] for m in metrics}
+
 for categories in categories_list:
   category_display_str = ', '.join(categories)
-  print(f'\n\t-- GSML for categories: [{category_display_str}]')
+  # print(f'\n\t-- GSML for categories: [{category_display_str}]')
 
   result = calculate_recall_and_precision(gsml_filename, submitted_filename, token_lookup, categories)
-  recall = format_result_value(result['recall']['value'])
-  precision = format_result_value(result['precision']['value'])
-  token_recall = format_result_value(result['token_recall']['value'])
-  token_precision = format_result_value(result['token_precision']['value'])
-  print(f'\tsummary: recall => {recall}, precision => {precision}, token_recall => {token_recall}, token_precision => {token_precision}')
-  print('\tbreakdown:')
-  for k, v in result.items():
-    print(f'\t\t{k}')
-    for sub_k, sub_v in v.items():
-      print(f'\t\t\t{sub_k} => {sub_v}')
+
+  for m in metrics:
+    res_to_print[m].append(result[m]['value'])
+
+  # recall = format_result_value(result['recall']['value'])
+  # precision = format_result_value(result['precision']['value'])
+  # token_recall = format_result_value(result['token_recall']['value'])
+  # token_precision = format_result_value(result['token_precision']['value'])
+
+
+  # print(f'\tsummary: recall => {recall}, precision => {precision}, token_recall => {token_recall}, token_precision => {token_precision}')
+  # print('\tbreakdown:')
+  # for k, v in result.items():
+  #   print(f'\t\t{k}')
+  #   for sub_k, sub_v in v.items():
+  #     print(f'\t\t\t{sub_k} => {sub_v}')
+
+
+
+for m in metrics:
+  print(m, end="")
+
+  for val in res_to_print[m]:
+    val = val if val else 0.
+
+    print(f",{val:.3f}", end="")
+
+  print()
