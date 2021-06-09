@@ -103,7 +103,7 @@ class ErrorCheckerDataModule(pl.LightningDataModule):
         for b in range(len(labels)):
             aligned_labels = []
 
-            # start caring only for the hypothesis
+            # compute loss only for the hypothesis, skip the context
             active = False
             
             for i, (input_id, word) in enumerate(zip(features["input_ids"][b], features.words(b))):
@@ -112,7 +112,8 @@ class ErrorCheckerDataModule(pl.LightningDataModule):
                 if word is not None:
                     label = labels[b][word]
 
-                # active = hypothesis, word is None for BOS and EOS, checking if the word changed
+                # align with word in case a new word started
+                # word is None for BOS and EOS
                 if active and word is not None and features.words(b)[i-1] != word:
                     aligned_label = label_map[labels[b][word]]
 
@@ -165,8 +166,6 @@ class ErrorCheckerDataModule(pl.LightningDataModule):
 
 
 
-
-
 class ErrorChecker(pl.LightningModule):
     def __init__(self, args, **kwargs):
         super().__init__()
@@ -189,13 +188,6 @@ class ErrorChecker(pl.LightningModule):
 
     def forward(self, **inputs):
         return self.model(**inputs)
-
-        # out = self.model(
-        #     input_ids=inputs["input_ids"],
-        #     attention_mask=inputs["attention_mask"],
-        #     labels=inputs["labels"]
-        # )
-        # return {"loss": out["loss"], "logits": out["logits"]}
 
     def training_step(self, batch, batch_idx):
         labels = batch["labels"]
@@ -223,21 +215,6 @@ class ErrorChecker(pl.LightningModule):
         self.log('loss/val', loss, prog_bar=True)
 
         return loss
-
-
-    # def test_step(self, batch, batch_idx):
-
-    #     out = self.model.generate(batch["input_ids"], 
-    #         max_length=self.args.max_length,
-    #         num_beams=1,
-    #         num_return_sequences=1)
-        
-    #     out = self.tokenizer.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-
-    #     for idx, o in enumerate(out):
-    #         logger.info(f"[{batch_idx * len(out) + idx}] {o}")
-    #         self.out_file_handle.write(o + "\n")
-
 
     def configure_optimizers(self):
         no_decay = ["bias", "LayerNorm.weight"]
@@ -307,7 +284,6 @@ class ErrorCheckerInferenceModule:
             logger.warning("Not using GPU")
 
 
-
     def predict(self, text, hyp, beam_size=1, is_hyp_tokenized=False):
         text_tokens = word_tokenize(text)
 
@@ -330,7 +306,7 @@ class ErrorCheckerInferenceModule:
                 inputs[key] = inputs[key].cuda()
 
         if beam_size > 1:
-            logger.warn("TODO: implement beam")
+            logger.warn("TODO: implement beam. Using greedy decoding.")
 
         logits = self.model.model(input_ids=inputs["input_ids"]).logits
         predictions = np.argmax(logits.cpu().numpy(), axis=2)[0]
@@ -341,7 +317,6 @@ class ErrorCheckerInferenceModule:
         word_indices = [idx for idx, offset in enumerate(offset_mapping) if offset[0]==1]
         hyp_word_indices = word_indices[-len(hyp_tokens):]
         hyp_labels = predictions[hyp_word_indices]
-
         hyp_tagged_tokens = [(token, id2label[label]) for token, label in zip(hyp_tokens, hyp_labels)]
 
         return hyp_tagged_tokens

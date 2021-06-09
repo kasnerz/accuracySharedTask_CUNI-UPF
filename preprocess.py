@@ -61,8 +61,8 @@ def identify_entities(sent):
     return [" ".join(entity)]
 
 
-
 def load_games(template_path, split="test"):
+    # TODO assign None to misgenerated games
     games = []
     game_data = None
     category = None
@@ -78,11 +78,12 @@ def load_games(template_path, split="test"):
 
             if line.startswith("=== Game"):
                 if game_data:
-                    games.append((int(game_id), game_data))
+                    games.append(game_data)
                     game_id += 1
 
                     while game_id in skipped_ids:
-                        logger.info(f"Skipping id {game_id}")
+                        logger.info(f"Game id {game_id} does not exist")
+                        games.append(None)
                         game_id += 1
                 game_data = GameData()
             elif "Game Data" in line:
@@ -98,7 +99,7 @@ def load_games(template_path, split="test"):
             else:
                 game_data.add_text(line, category)
 
-    games.append((int(game_id),game_data))
+    games.append(game_data)
     return games
 
 

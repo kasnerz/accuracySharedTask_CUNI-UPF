@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# source: https://gist.github.com/jannismain/e96666ca4f059c3e5bc28abb711b5c92
+
 import json
 from typing import Union
 

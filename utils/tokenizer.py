@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from sacremoses import MosesDetokenizer
-from nltk import word_tokenize, sent_tokenize
+# from nltk import word_tokenize, sent_tokenize
 import re
 
 class Tokenizer:

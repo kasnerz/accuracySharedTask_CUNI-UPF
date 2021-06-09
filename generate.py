@@ -46,8 +46,10 @@ class Generator:
                 self.rotowire[split] = json.load(f)
 
 
-
     def load_cities(self):
+        """
+        Load the list of team cities extracted from the Rotowire dataset
+        """
         cities = []
         with open("cities.txt") as f:
             for line in f.readlines():
@@ -55,23 +57,33 @@ class Generator:
         return cities
 
 
-    def modify_number(self, token):
-        token = str(token)
+    def modify_number(self, text):
+        """
+        Modify a cardinal number (integer). Gaussian noise with a cut-off at
+        zero is applied until the number is different from the original number.
 
-        if not token[0].isnumeric():
+        If `text` is not digit-only, alpha2digit is used to transform the numbers 
+        in text to digit-only variants and transformed back to text after modifications.
+        """
+        text = str(text)
+
+        if not all([l.isnumeric() for l in text]):
             to_lex = True
-            token = alpha2digit(token, "en")
+            text = alpha2digit(text, "en")
         else:
             to_lex = False
 
-        num = re.sub(r"[^\d]", "", str(token))
+        # TODO change to findall(), apply the modifications separately
+        num = re.sub(r"[^\d]", "", str(text))
         
         if not num:
-            return token
+            return text
 
         num = int(num)
         modified_num = num
 
+        # apply Gaussian noise with sigma=3 until the number differs
+        # negative numbers do not occur in texts -> threshold at zero
         while modified_num == num:
             modified_num = max(0, int(random.gauss(num, 3)))
 
@@ -82,6 +94,7 @@ class Generator:
 
 
     def modify_ordinal(self, token):
+        # TODO rewrite
         if not token[0].isnumeric():
             to_lex = True
             num = alpha2digit(token, "en")
@@ -115,6 +128,9 @@ class Generator:
 
 
     def random_choice_neq(self, l, neq_to):
+        """
+        Return a random element from a list. The element must be different from the given element `neq_to`.
+        """
         assert any([el != neq_to for el in l]), f"Cannot select element not equal to {neq_to} in {l}"
 
         while True:
@@ -124,19 +140,29 @@ class Generator:
 
 
     def modify_entity(self, doc, game_data, entity):
+        """
+        Change an entity to an errorneous one.
+
+        doc - output of Spacy NER NLP pipeline
+        game_data - GameData object for the relevant game
+        entity - (text, label, start, end, list_of_tokens) as identified Spacy NER
+        """
         ent_text = entity[0]
         ent_type = entity[1]
         ent_tokens = entity[4]
 
         if ent_text in self.days_of_week:
+            # change a day of week to a random day
             random_day = self.random_choice_neq(l=self.days_of_week, neq_to=ent_text)
             tokens = [random_day]
             labels = [Label.NAME]
         elif ent_type == "PERSON":
+            # swap a player with another player present in the game
             random_player = self.random_choice_neq(l=list(game_data.get_players()), neq_to=ent_text)
             tokens = word_tokenize(random_player)
             labels = [Label.NAME for token in tokens]
         elif ent_type == "CARDINAL":
+            # try to modify a cardinal number (assign OK if modificiation not succesful)
             modified_number = self.modify_number(ent_text)
 
             if modified_number != ent_text:
@@ -146,6 +172,8 @@ class Generator:
                 tokens = [ent_text]
                 labels = [Label.O]
         elif ent_type == "GPE":
+            # GPE - usually a name of the city; select another city from all the cities
+            # in the Rotowire dataset
             random_city = self.random_choice_neq(l=self.cities, neq_to=ent_text)
             tokens = word_tokenize(random_city)
             labels = [Label.NAME for token in tokens]
@@ -153,6 +181,9 @@ class Generator:
             or ent_type == "TIME" \
             or ent_type == "QUANTITY" \
             or re.match(r"\d+\s*-\s*\d+", ent_text): # score, may be recognized as date
+
+            # modify cardinal numbers token-wise 
+            # TODO merge with CARDINAL, change modify_cardinal to take into account surrounding text
             tokens = []
             labels = []
             # can be a multi-word expression such as "88% to 77%" or "39 minutes"
@@ -221,6 +252,7 @@ class Generator:
 
         for i, token in enumerate(doc):
             if i in starts and random.random() < self.args.modification_rate:
+                # modify only a portion of named entities defined by the modification_rate argument
                 current_entity = ne[starts.index(i)]
                 current_entity_started = True
             elif i in ends:
@@ -229,38 +261,45 @@ class Generator:
                 tokens.append(token)
                 labels.append(Label.O.name)
             elif current_entity_started:
+                # modified entity may have a different number of tokens
+                # -> new tokens are added, remaining original tokens are skipped
                 ent_tokens, ent_labels = self.modify_entity(doc, game_data, current_entity)
                 tokens += ent_tokens
                 labels += ent_labels
-
-            if current_entity_started:
                 current_entity_started = False
 
         # only a single augmented sentence per input sentence
+        # TODO remove for loop?
         return [(tokens, labels)]
 
     def generate(self, games, split):
         data = []
 
-        for game_id, game_data in games[self.args.start:self.args.end]:
+        for game_id in range(self.args.start, self.args.end):
+            game_data = games[game_id]
             rotowire_game = self.rotowire[split][game_id]
             rotowire_summary = rotowire_game["summary"]
             rotowire_summary_sents = sent_tokenize(" ".join(rotowire_summary))
 
             for sent in rotowire_summary_sents:
                 sent_detok = self.detokenizer.detokenize(sent)
+
+                # retrieve context
+                # TODO: rename the method to retrieve_ctx()
                 gt_texts = self.ss.fetch_text(sent_detok, game_data)
                 gt_tokens = word_tokenize(gt_texts)
 
                 sep_token = [self.tokenizer.sep_token]
                 gt_labels = [Label.O.name for _ in range(len(gt_tokens)+1)] # also for the sep_token
 
+                # run the Spacy NLP pipeline for identifying named entities
                 doc = self.spacy_nlp(sent_detok)
                 augmented_sents = self.augment(doc, game_data)
 
                 for aug_tokens, aug_labels in augmented_sents:
                     tokens_all = gt_tokens + sep_token + aug_tokens
-                    # there is not "%" sign in the task data and the backslash may break the resulting JSON
+                    # there is not "%" sign in the task data
+                    # the backslash may break the resulting JSON
                     tokens_all = [str(token).replace("%", "percent").replace("\\","") for token in tokens_all]
                     labels_all = gt_labels + aug_labels
 
@@ -278,6 +317,7 @@ class Generator:
         out_fname = f"{split}.json"
 
         if self.args.start or self.args.end:
+            # partial file for parallelization, will be merged
             out_fname = f"{split}-{self.args.start:04d}-{self.args.end:04d}.json"
 
         with open(os.path.join(self.args.data_dir, self.args.output, out_fname), "w") as f:
@@ -286,9 +326,13 @@ class Generator:
 
 
     def extract_annotated(self, games):
+        """
+        Generate training data from the annotated data for the task.
+        """
         splits = ["train", "dev", "test"]
         data = {s : [] for s in splits}
 
+        # the games from Rotowire are used for retrieving the context for the annotated errors
         with open(self.args.annotations) as f_anno, open(self.args.games) as f_games:
             reader_anno = csv.reader(f_anno, delimiter=',', quotechar='"')
             reader_games = csv.reader(f_games, delimiter=',', quotechar='"')
@@ -304,16 +348,11 @@ class Generator:
                 sentences = sent_tokenize(row[4])
 
                 logger.info(f"{game_id}")
-                assert rotowire_game_id != 515
-
-                if rotowire_game_id >= 515:
-                    rotowire_game_id -= 1
 
                 gid, game_data = games[rotowire_game_id]
 
                 for j, sent in enumerate(sentences):
                     sent_tokens = sent.split()
-
                     sent_detok = self.detokenizer.detokenize(sent)
                     gt_texts = self.ss.fetch_text(sent_detok, game_data)
 
@@ -327,6 +366,7 @@ class Generator:
                     sent_labels = [Label.O.name for _ in sent_tokens]
 
                     while True:
+                        # process annotations until either the game or the current sentence changes
                         if game_id != current_anno[0][:4] or int(current_anno[1])-1 != j:
                             break
 
@@ -346,6 +386,7 @@ class Generator:
                     # print("====================")
 
                     tokens_all = gt_tokens + sep_token + sent_tokens
+                    # a quote or backslash in the data may break the generated JSON
                     tokens_all = [str(token).replace('"', '\"').replace("\\","") for token in tokens_all]
                     labels_all = gt_labels + sent_labels
 
@@ -354,6 +395,7 @@ class Generator:
                         "labels": labels_all
                     }
 
+                    # first 10 games are in the test split for easier visual checks
                     if i < 10:
                         data["test"].append(example)
                     elif i < 55:

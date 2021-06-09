@@ -52,7 +52,10 @@ if __name__ == '__main__':
     dm.prepare_data()
     dm.setup('fit')
 
-    model = ErrorChecker(args)
+    if args.model_path:
+        model = ErrorChecker.load_from_checkpoint(args.model_path)
+    else:
+        model = ErrorChecker(args)
 
     ckpt_output_dir = os.path.join(args.output_dir,
         args.experiment

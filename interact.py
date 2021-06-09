@@ -53,23 +53,12 @@ if __name__ == "__main__":
 
     game_idx = args.game_idx
 
-    
-
-
     if game_idx is None:
         text = input("[Text]: ")
     else:
         ss = SentenceScorer()
         test_games = load_games(args.templates, "test")
-
-        # misgenerated game
-        assert game_idx != 515
-
-        if game_idx >= 515:
-            game_idx -= 1
-
-        _, game_data = test_games[game_idx]
-
+        game_data = test_games[game_idx]
 
     while True:
         hyp = input("[Hyp]: ")

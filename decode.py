@@ -42,15 +42,7 @@ class Decoder:
         test_idx = int(row[3])
         text = row[4]
 
-        # misgenerated game
-        assert test_idx != 515
-
-        if test_idx >= 515:
-            test_idx -= 1
-
-        game_idx, game_data = test_games[test_idx]
-
-        # assert game_idx == test_idx, f"{game_idx} != {test_idx}"
+        game_data = test_games[test_idx]
 
         logger.info(f"Processing {file}")
         sentences = sent_tokenize(text)
