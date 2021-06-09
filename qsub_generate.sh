@@ -4,14 +4,14 @@
 # 726 dev
 # 727 test
 
-EXPERIMENT=rotowire2
+EXPERIMENT=rotowire_dctx
 
-STEP=500
+STEP=50
 START=0
-END=$STEP
-TOTAL=3396
+END=$(($START+$STEP))
+TOTAL=249
 
-SPLIT="train"
+SPLIT="dev"
 
 while [ $START -le $TOTAL ]
 do
@@ -19,5 +19,4 @@ do
    START=$(($START+$STEP))
    END=$(($END+$STEP))
 done
-
 

@@ -102,9 +102,15 @@ class Generator:
         # can be a multi-word expression such as "88% to 77%" or "39 minutes"
         tokens = []
         labels = []
-        for token in ent_tokens:
+        for i, token in enumerate(ent_tokens):
+
             token = str(token)
-            modified_token = self.modify_numbers(token, mode=mode)
+
+            # this enables to modify some of the numbers in cases such as if "14-11" is identified as a single entity
+            if i > 0 and random.random() > self.args.modification_rate:
+                modified_token = token
+            else:    
+                modified_token = self.modify_numbers(token, mode=mode)
 
             if modified_token != token:
                 tokens.append(modified_token)
@@ -154,7 +160,7 @@ class Generator:
             or "half" in ent_text \
             or "quarter" in ent_text:   # "X-th quarter/half" (may be recognized as date), X->Y
             tokens, labels = self.modify_text_with_numbers(ent_tokens, mode="ordinal")
-        elif (ent_type == "ORG" or ent_type == "FAC") and ent_text in game_data.get_teams():
+        elif ent_text in game_data.get_teams():
             # change to the other team name
             random_team = random_choice_neq(l=list(game_data.get_teams()), neq_to=ent_text)
             tokens = word_tokenize(random_team)
@@ -226,6 +232,10 @@ class Generator:
 
         for game_id in range(start, end):
             game_data = games[game_id]
+
+            if not game_data:
+                continue
+
             rotowire_game = self.rotowire[split][game_id]
             rotowire_summary = rotowire_game["summary"]
             rotowire_summary_sents = sent_tokenize(" ".join(rotowire_summary))
@@ -267,8 +277,8 @@ class Generator:
                 }
                 data.append(example)
 
-                if len(data) > 0 and len(data) % 100 == 0:
-                    logger.info(f"{len(data)} examples generated.")
+                if len(data) > 0 and len(data) % 20 == 0:
+                    logger.info(f"{len(data)} examples generated (game id {game_id}).")
 
         out_fname = f"{split}.json"
 
