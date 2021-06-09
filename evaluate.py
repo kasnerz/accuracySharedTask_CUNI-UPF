@@ -48,7 +48,7 @@ def consistent_tokenization(tokenization_mode, current_line_mode):
     - START_IDX, MISTAKE_DATA
   The function returns a tuple where the first element is the dict, and the second is num_mistakes
 """
-def create_mistake_dict(filename, categories, token_lookup):
+def create_mistake_dict(filename, categories, token_lookup, n_games_only=None):
   mistake_dict = {}
   tokens_used = {}
   matches = 0
@@ -71,6 +71,9 @@ def create_mistake_dict(filename, categories, token_lookup):
       doc_start_idx   = csv_int(row[6])
       doc_end_idx     = csv_int(row[7])
       category        = row[8]
+
+      if n_games_only and text_id == f"S{n_games_only+1:03d}":
+        break
 
       # Check the sanity of the token submissions
       sent_given = (sent_start_idx != None and sent_end_idx != None and sentence_id != None)
@@ -232,9 +235,9 @@ def safe_divide(x, y):
   Takes as input dicts created with match_mistake_dicts(), plus a list of categories
   Only the categories given will be checked.
 """
-def calculate_recall_and_precision(gsml_filename, submitted_filename, token_lookup, categories=[]):
-  gsml, gsml_num_lines = create_mistake_dict(gsml_filename, categories, token_lookup)
-  submitted, submitted_num_lines = create_mistake_dict(submitted_filename, categories, token_lookup)
+def calculate_recall_and_precision(gsml_filename, submitted_filename, token_lookup, categories=[], n_games_only=None):
+  gsml, gsml_num_lines = create_mistake_dict(gsml_filename, categories, token_lookup, n_games_only)
+  submitted, submitted_num_lines = create_mistake_dict(submitted_filename, categories, token_lookup, n_games_only)
 
   # Mistake level
   per_category_matches = match_mistake_dicts(gsml, submitted)
@@ -298,6 +301,9 @@ parser.add_argument('--submitted', type=str, nargs='?',
 parser.add_argument('--token_lookup', type=str,
                     help='The tokenization file (YAML)')
 
+parser.add_argument('--n_games_only', type=int, default=None,
+                    help='Evaluate only on first N games (e.g. in case other games were used as training data)')
+
 args = parser.parse_args()
 gsml_filename = args.gsml
 submitted_filename = args.submitted
@@ -322,7 +328,7 @@ for categories in categories_list:
   category_display_str = ', '.join(categories)
   # print(f'\n\t-- GSML for categories: [{category_display_str}]')
 
-  result = calculate_recall_and_precision(gsml_filename, submitted_filename, token_lookup, categories)
+  result = calculate_recall_and_precision(gsml_filename, submitted_filename, token_lookup, categories, n_games_only=args.n_games_only)
 
   for m in metrics:
     res_to_print[m].append(result[m]['value'])
