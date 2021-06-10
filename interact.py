@@ -32,6 +32,8 @@ if __name__ == "__main__":
         help="Beam size.")
     parser.add_argument("--gpus", default=1, type=int,
         help="Number of GPUs.")
+    parser.add_argument("--ctx", type=int, default=15,
+        help="Number of sentences retrieved for the context.")
     parser.add_argument("--max_length", type=int, default=1024,
         help="Maximum number of tokens per example")
     parser.add_argument("--checkpoint", type=str, default="model.ckpt",
@@ -40,6 +42,7 @@ if __name__ == "__main__":
         help="Retrieve the references automatically from game_id.")
     parser.add_argument("--templates", type=str, default="generated/simple_templates",
         help="Path to generated templates.")
+
     args = parser.parse_args()
 
     logger.info(args)
@@ -64,7 +67,7 @@ if __name__ == "__main__":
         hyp = input("[Hyp]: ")
 
         if game_idx is not None:
-            text = ss.retrieve_ctx(hyp, game_data, cnt=15)
+            text = ss.retrieve_ctx(hyp, game_data, cnt=args.ctx)
             print("[Text-R]:", text)
 
         out = ecim.predict(text=text, hyp=hyp, beam_size=args.beam_size)

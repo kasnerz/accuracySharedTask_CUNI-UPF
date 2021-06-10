@@ -49,7 +49,7 @@ class Decoder:
         doc_token_idx = 0
 
         for sent_idx, sentence in enumerate(sentences):
-            text = self.ss.retrieve_ctx(sentence=sentence, game_data=game_data)
+            text = self.ss.retrieve_ctx(sentence=sentence, game_data=game_data, cnt=self.args.ctx)
             hyp = sentence
             out = self.ec.predict(text=text, hyp=hyp, beam_size=self.args.beam_size, is_hyp_tokenized=True)
 
@@ -109,6 +109,8 @@ if __name__ == "__main__":
         help="Input directory.")
     parser.add_argument("--out_fname", default="out.csv", type=str,
         help="Output file.")
+    parser.add_argument("--ctx", type=int, default=15,
+        help="Number of sentences retrieved for the context.")
     parser.add_argument("--experiment", type=str, required=True,
         help="Experiment name.")
     parser.add_argument("--seed", default=42, type=int,

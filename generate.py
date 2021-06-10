@@ -37,11 +37,11 @@ class Generator:
         self.spacy_nlp = en_core_web_sm.load()
         self.cities = self.load_cities()
         self.days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
         self.ents_total_cnt = 0
         self.ents_total_mod_cnt = 0
         self.rotowire = defaultdict(None)
         self.ss = SentenceScorer()
+
         for split in ["test", "dev", "train"]:
             with open(os.path.join(self.args.rotowire_dir, f"{split}.json")) as f:
                 self.rotowire[split] = json.load(f)
@@ -66,22 +66,24 @@ class Generator:
         If `orig_text` contains non-digit numbers, alpha2digit is used to transform all the numbers 
         in text to digit-only variants and transformed back to text after modifications.
         """
-        # alpha2digit cannot handle these
-        extra_ordinals = {"first" : "1st", "second" : "2nd", "third" : "3rd"}
-
         orig_text = str(orig_text)
         text = alpha2digit(orig_text, "en")
 
         if mode == "ordinal":
+            # alpha2digit cannot handle "first", "second" and "third", has to be handled separately
+            extra_ordinals = {"first" : "1st", "second" : "2nd", "third" : "3rd"}
             for k, v in extra_ordinals.items():
-                # replace only if surrounded by word break to avoid things like seconds -> 2nds
+                # replace only if surrounded by word breaks to avoid things like seconds -> 2nds
                 text = re.sub(rf"\b{k}\b", rf"{v}", text)
 
-        to_lex = (orig_text != text)
+        to_lex = (orig_text != text)    # some numbers in lexical form were transformed to digits
         chars = [ch for ch in text]
+
+        # find all number-like groups
         numbers = [(m.group(0), m.start(0), m.end(0)) for m in re.finditer(r"\d+\w*", text)]
 
         for num_str, start, end in numbers:
+            # extract digits for modifications
             num = int(re.search(r"\d+", num_str).group(0))
             modified_num = num
 
@@ -124,10 +126,10 @@ class Generator:
 
     def modify_entity(self, doc, game_data, entity):
         """
-        Change an entity to an errorneous one.
+        Make the entity errorneous.
 
         doc - output of Spacy NER NLP pipeline
-        game_data - GameData object for the relevant game
+        game_data - GameData object for the game
         entity - (text, label, start, end, list_of_tokens) as identified Spacy NER
         """
         ent_text = entity[0]
@@ -196,7 +198,8 @@ class Generator:
         current_entity_started = False
 
         self.ents_total_cnt += len(ne)
-        # we make sure that our changes are the necessary changes to make the sentence correct
+        # do not change more than half of entities to make sure that the modifications
+        # are the least modifications necessary to make the sentence correct
         max_modified_ents = len(ne) // 2
         modified_ents_cnt = 0
 
@@ -224,8 +227,8 @@ class Generator:
 
         return (tokens, labels)
 
-    def generate(self, games, split):
-        data = []
+    def generate(self, games, split, ctx_sizes):
+        data = {ctx_size : [] for ctx_size in ctx_sizes}
 
         start = self.args.start or 0
         end = self.args.end or len(games)
@@ -242,55 +245,45 @@ class Generator:
 
             for sent in rotowire_summary_sents:
                 sent_detok = self.detokenizer.detokenize(sent)
-                ctx_orig_scored = set([x[0] for x in self.ss.retrieve_ctx_scored(sent_detok, game_data, cnt=15)])
 
                 # run the Spacy NLP pipeline for identifying named entities
                 doc = self.spacy_nlp(sent_detok)
                 modif_tokens, modif_labels = self.augment(doc, game_data)
-
                 modif_sent_detok = self.detokenizer.detokenize(" ".join(modif_tokens))
-                ctx_modif_scored = set([x[0] for x in self.ss.retrieve_ctx_scored(modif_sent_detok, game_data, cnt=15)])
 
-                ctx_scored = ctx_orig_scored.union(ctx_modif_scored)
-                # logger.info(f"{len(ctx_scored)} merged sentences")
+                # retrieve N scored sentences where N is the largest context size
+                ctx_scored = self.ss.retrieve_ctx_scored(modif_sent_detok, game_data, cnt=sorted(ctx_sizes)[-1])
 
-                ctx = " ".join(ctx_scored)
-                ctx_tokens = word_tokenize(ctx)
+                for ctx_size in ctx_sizes:
+                    ctx = " ".join([x[0] for x in ctx_scored[:ctx_size]])
+                    ctx_tokens = word_tokenize(ctx)
+                    
+                    # there is not "%" sign in the task data
+                    # "\" may break the resulting JSON
+                    ctx_tokens = [str(token).replace("%", "percent").replace("\\","") for token in ctx_tokens]
+                    modif_tokens = [str(token).replace("%", "percent").replace("\\","") for token in modif_tokens]
 
-                if len(ctx_tokens) > 400:
-                    logger.warning(f"{len(ctx_tokens)} ctx tokens")
-
-                ctx_labels = [Label.O.name for _ in range(len(ctx_tokens)+1)] # also for the sep_token
-
-                sep_token = [self.tokenizer.sep_token]
-                tokens_all = ctx_tokens + sep_token + modif_tokens
-                # there is not "%" sign in the task data
-                # the backslash may break the resulting JSON
-                tokens_all = [str(token).replace("%", "percent").replace("\\","") for token in tokens_all]
-                labels_all = ctx_labels + modif_labels
-
-                assert len(tokens_all) == len(labels_all)
-
-                example = {
-                    "text" : tokens_all,
-                    "labels": labels_all
-                }
-                data.append(example)
+                    example = {
+                        "ctx" : ctx_tokens,
+                        "sent" : modif_tokens,
+                        "labels": modif_labels
+                    }
+                    data[ctx_size].append(example)
 
                 if len(data) > 0 and len(data) % 20 == 0:
                     logger.info(f"{len(data)} examples generated (game id {game_id}).")
 
         out_fname = f"{split}.json"
-
         logger.info(f"{self.ents_total_mod_cnt}/{self.ents_total_cnt} entities modified.")
 
         if self.args.start or self.args.end:
             # partial file for parallelization, will be merged
             out_fname = f"{split}-{self.args.start:04d}-{self.args.end:04d}.json"
 
-        with open(os.path.join(self.args.data_dir, self.args.output, out_fname), "w") as f:
-            s = json.dumps({"data" : data}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
-            f.write(s)
+        for ctx_size in ctx_sizes:
+            with open(os.path.join(self.args.data_dir, self.args.output + f"_ctx{ctx_size}", out_fname), "w") as f:
+                s = json.dumps({"data" : data[ctx_size]}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
+                f.write(s)
 
 
     def extract_annotated(self, games):
@@ -316,18 +309,17 @@ class Generator:
                 sentences = sent_tokenize(row[4])
 
                 logger.info(f"{game_id}")
-
                 gid, game_data = games[rotowire_game_id]
 
                 for j, sent in enumerate(sentences):
                     sent_tokens = sent.split()
                     sent_detok = self.detokenizer.detokenize(sent)
-                    gt_texts = self.ss.fetch_text(sent_detok, game_data)
+                    ctx_texts = self.ss.fetch_text(sent_detok, game_data, cnt=self.args.ctx)
 
                     # print(sent)
-                    # print(gt_texts)
+                    # print(ctx_texts)
                     # print("----------------")
-                    ctx_tokens = word_tokenize(gt_texts)
+                    ctx_tokens = word_tokenize(ctx_texts)
 
                     sep_token = [self.tokenizer.sep_token]
                     ctx_labels = [Label.O.name for _ in range(len(ctx_tokens)+1)] # also for the sep_token
@@ -353,14 +345,15 @@ class Generator:
                     # print(list(zip(sent_tokens, sent_labels)))
                     # print("====================")
 
-                    tokens_all = ctx_tokens + sep_token + sent_tokens
+                    # tokens_all = ctx_tokens + sep_token + sent_tokens
                     # a quote or backslash in the data may break the generated JSON
-                    tokens_all = [str(token).replace('"', '\"').replace("\\","") for token in tokens_all]
-                    labels_all = ctx_labels + sent_labels
+                    ctx_tokens = [str(token).replace('"', '\"').replace("\\","") for token in tokens_all]
+                    # labels_all = ctx_labels + sent_labels
 
                     example = {
-                        "text" : tokens_all,
-                        "labels": labels_all
+                        "ctx" : ctx_tokens,
+                        "sent" : sent_tokens,
+                        "labels": sent_labels
                     }
 
                     # first 10 games are in the test split for easier visual checks
@@ -375,9 +368,11 @@ class Generator:
         for split in splits:
             out_fname = f"{split}.json"
 
-            with open(os.path.join(self.args.data_dir, self.args.output, out_fname), "w") as f:
-                s = json.dumps({"data" : data[split]}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
-                f.write(s)
+            # TODO fix 
+            for ctx_size in ctx_sizes:
+                with open(os.path.join(self.args.data_dir, self.args.output + f"_ctx{ctx_size}", out_fname), "w") as f:
+                    s = json.dumps({"data" : data[split]}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
+                    f.write(s)
 
 
 if __name__ == '__main__':
@@ -390,8 +385,8 @@ if __name__ == '__main__':
         help="Path to data.")
     parser.add_argument("--output", type=str, required=True,
         help="Name of the output directory.")
-    # parser.add_argument("--samples_per_game", type=int, default=10,
-    #     help="Training samples generated per game.")
+    parser.add_argument("--ctx", type=int, default=None,
+        help="Number of sentences retrieved for the context.")
     parser.add_argument("--modification_rate", type=float, default=0.5,
         help="Proportion of modified entities.")
     parser.add_argument("--seed", type=int, default=42,
@@ -412,14 +407,17 @@ if __name__ == '__main__':
     random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    os.makedirs(os.path.join(args.data_dir, args.output), exist_ok=True)
+    ctx_sizes = [args.ctx] if args.ctx is not None else [5, 10, 20, 40]
+
+    for ctx_size in ctx_sizes:
+        os.makedirs(os.path.join(args.data_dir, args.output + f"_ctx{ctx_size}"), exist_ok=True)
+
     g = Generator(args)
 
     logger.info(f"Processing {args.split} data")
     games = load_games(args.templates, args.split)
 
-
     if args.annotations is not None:
         g.extract_annotated(games)
     else:
-        g.generate(games, args.split)
+        g.generate(games, args.split, ctx_sizes)

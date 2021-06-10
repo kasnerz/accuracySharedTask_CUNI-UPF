@@ -27,7 +27,7 @@ class SentenceScorer:
         return scored_sentences[:cnt]
 
     def retrieve_ctx(self, sentence, game_data, cnt=15):
-        scored_sentences = retrieve_ctx_scored(sentence, game_data, cnt)
+        scored_sentences = self.retrieve_ctx_scored(sentence, game_data, cnt)
 
         # for i,(txt, score) in enumerate(scored_sentences[:30]):
         #     print(f"{i}\t{float(score):.3f}\t{txt}")

@@ -63,10 +63,6 @@ class ErrorCheckerDataModule(pl.LightningDataModule):
         }
 
         for split in self.dataset.keys():
-            for column in self.dataset[split].column_names:
-                if column not in ["text", "labels"]:
-                    self.dataset[split] = self.dataset[split].remove_columns(column)
-
             self.dataset[split] = self.dataset[split].map(
                 self._convert_to_features,
                 batched=True,
@@ -80,13 +76,14 @@ class ErrorCheckerDataModule(pl.LightningDataModule):
 
 
     def _convert_to_features(self, example_batch, indices=None):
-        text = example_batch["text"]
+        ctx = example_batch["ctx"]
+        sent = example_batch["sent"]
 
-        features = self.tokenizer(text, 
+        features = self.tokenizer(ctx, sent, 
             is_split_into_words=True, 
             return_offsets_mapping=True,
             max_length=self.args.max_length,
-            truncation=True)
+            truncation='only_first')
 
         features['labels'] = self._align_labels_with_tokens(
             features, example_batch['labels'])
@@ -104,22 +101,21 @@ class ErrorCheckerDataModule(pl.LightningDataModule):
 
             # compute loss only for the hypothesis, skip the context
             active = False
+            prev_input_id = None
             
             for i, (input_id, word) in enumerate(zip(features["input_ids"][b], features.words(b))):
                 aligned_label = do_not_care_label
-
-                if word is not None:
-                    label = labels[b][word]
 
                 # align with word in case a new word started
                 # word is None for BOS and EOS
                 if active and word is not None and features.words(b)[i-1] != word:
                     aligned_label = label_map[labels[b][word]]
 
-                if input_id == self.tokenizer.sep_token_id:
+                if prev_input_id == input_id == self.tokenizer.sep_token_id:
                     active = True
 
                 aligned_labels.append(aligned_label)
+                prev_input_id = input_id
 
             assert len(features['input_ids'][b]) == len(aligned_labels)
             aligned_labels_batch.append(aligned_labels)
@@ -306,13 +302,11 @@ class ErrorCheckerInferenceModule:
         else:
             hyp_tokens = word_tokenize(hyp)
 
-        tokens = text_tokens + [self.tokenizer.sep_token] + hyp_tokens
-
-        inputs = self.tokenizer(tokens, 
+        inputs = self.tokenizer(text_tokens, hyp_tokens,
                         return_tensors='pt',
                         return_offsets_mapping=True,
                         max_length=self.args.max_length,
-                        truncation=True,
+                        truncation='only_first',
                         is_split_into_words=True)
 
         if hasattr(self.args, "gpus") and self.args.gpus > 0:
