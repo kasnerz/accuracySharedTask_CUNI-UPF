@@ -20,7 +20,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 GPUS=1
-GPU_RAM=11
+GPU_RAM=16
 MAX_THREADS=8
 # MAX_LENGTH=512
 

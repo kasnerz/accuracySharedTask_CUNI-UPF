@@ -14,7 +14,7 @@ from utils.json_encoder import CompactJSONEncoder
 from utils.config import Label
 from utils.tokenizer import Tokenizer as Detokenizer
 from utils.sentence_scorer import SentenceScorer
-from utils.utils import random_choice_neq
+from utils.utils import random_choice_neq, normalize_tokens
 
 from nltk import word_tokenize, sent_tokenize
 from num2words import num2words
@@ -198,17 +198,17 @@ class Generator:
         current_entity_started = False
 
         self.ents_total_cnt += len(ne)
-        # do not change more than half of entities to make sure that the modifications
-        # are the least modifications necessary to make the sentence correct
-        max_modified_ents = len(ne) // 2
-        modified_ents_cnt = 0
+        # # do not change more than half of entities to make sure that the modifications
+        # # are the least modifications necessary to make the sentence correct
+        # max_modified_ents = len(ne) // 2
+        # modified_ents_cnt = 0
 
         for i, token in enumerate(doc):
-            if i in starts and modified_ents_cnt < max_modified_ents and random.random() < self.args.modification_rate:
+            if i in starts and random.random() < self.args.modification_rate:
                 # modify only a portion of named entities defined by the modification_rate argument
                 current_entity = ne[starts.index(i)]
                 current_entity_started = True
-                modified_ents_cnt += 1
+                # modified_ents_cnt += 1
             elif i in ends:
                 current_entity = None
             if current_entity is None:
@@ -234,6 +234,9 @@ class Generator:
         end = self.args.end or len(games)
 
         for game_id in range(start, end):
+            if game_id >= len(games):
+                break
+
             game_data = games[game_id]
 
             if not game_data:
@@ -257,7 +260,7 @@ class Generator:
                 for ctx_size in ctx_sizes:
                     ctx = " ".join([x[0] for x in ctx_scored[:ctx_size]])
                     ctx_tokens = word_tokenize(ctx)
-                    
+
                     # there is not "%" sign in the task data
                     # "\" may break the resulting JSON
                     ctx_tokens = [str(token).replace("%", "percent").replace("\\","") for token in ctx_tokens]
@@ -286,13 +289,15 @@ class Generator:
                 f.write(s)
 
 
-    def extract_annotated(self, games):
+    def extract_annotated(self, games, ctx_sizes):
         """
         Generate training data from the annotated data for the task.
         """
         splits = ["train", "dev", "test"]
-        data = {s : [] for s in splits}
-
+        data = {
+            split : {ctx_size : [] for ctx_size in ctx_sizes}
+                for split in splits
+        }
         # the games from Rotowire are used for retrieving the context for the annotated errors
         with open(self.args.annotations) as f_anno, open(self.args.games) as f_games:
             reader_anno = csv.reader(f_anno, delimiter=',', quotechar='"')
@@ -304,29 +309,27 @@ class Generator:
             current_anno = next(reader_anno)
 
             for i, row in enumerate(reader_games):
+                if i < 10:
+                    split = "test"
+                elif i < 55:
+                    split = "train"
+                else:
+                    split = "dev"
+
                 game_id = row[0]
                 rotowire_game_id = int(row[3])
                 sentences = sent_tokenize(row[4])
 
-                logger.info(f"{game_id}")
-                gid, game_data = games[rotowire_game_id]
+                logger.info(f"Processing game {game_id}")
+                game_data = games[rotowire_game_id]
 
                 for j, sent in enumerate(sentences):
-                    sent_tokens = sent.split()
+                    sent_tokens = normalize_tokens(sent.split())
                     sent_detok = self.detokenizer.detokenize(sent)
-                    ctx_texts = self.ss.fetch_text(sent_detok, game_data, cnt=self.args.ctx)
-
-                    # print(sent)
-                    # print(ctx_texts)
-                    # print("----------------")
-                    ctx_tokens = word_tokenize(ctx_texts)
-
-                    sep_token = [self.tokenizer.sep_token]
-                    ctx_labels = [Label.O.name for _ in range(len(ctx_tokens)+1)] # also for the sep_token
                     sent_labels = [Label.O.name for _ in sent_tokens]
 
                     while True:
-                        # process annotations until either the game or the current sentence changes
+                        # process annotations until either the game id or the sentence id changes
                         if game_id != current_anno[0][:4] or int(current_anno[1])-1 != j:
                             break
 
@@ -334,6 +337,7 @@ class Generator:
                         error_end = int(current_anno[5])
                         error_type = Label[current_anno[8]].name
 
+                        # replace OK labels by error labels for all relevant tokens
                         for k in range(error_start, error_end+1):
                             sent_labels[k-1] = error_type
 
@@ -342,36 +346,28 @@ class Generator:
                         except StopIteration:
                             break
 
-                    # print(list(zip(sent_tokens, sent_labels)))
-                    # print("====================")
+                    ctx_scored = self.ss.retrieve_ctx_scored(sent_detok, game_data, cnt=sorted(ctx_sizes)[-1])
 
-                    # tokens_all = ctx_tokens + sep_token + sent_tokens
-                    # a quote or backslash in the data may break the generated JSON
-                    ctx_tokens = [str(token).replace('"', '\"').replace("\\","") for token in tokens_all]
-                    # labels_all = ctx_labels + sent_labels
+                    for ctx_size in ctx_sizes:
+                        ctx = " ".join([x[0] for x in ctx_scored[:ctx_size]])
+                        ctx_tokens = normalize_tokens(word_tokenize(ctx))
+                        
+                        example = {
+                            "ctx" : ctx_tokens,
+                            "sent" : sent_tokens,
+                            "labels": sent_labels
+                        }
+                        if i % 5 == 0 and j == 0:
+                            logger.info(example)
 
-                    example = {
-                        "ctx" : ctx_tokens,
-                        "sent" : sent_tokens,
-                        "labels": sent_labels
-                    }
-
-                    # first 10 games are in the test split for easier visual checks
-                    if i < 10:
-                        data["test"].append(example)
-                    elif i < 55:
-                        data["train"].append(example)
-                    else:
-                        data["dev"].append(example)
-
-
+                        data[split][ctx_size].append(example)
+                        
         for split in splits:
             out_fname = f"{split}.json"
 
-            # TODO fix 
             for ctx_size in ctx_sizes:
                 with open(os.path.join(self.args.data_dir, self.args.output + f"_ctx{ctx_size}", out_fname), "w") as f:
-                    s = json.dumps({"data" : data[split]}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
+                    s = json.dumps({"data" : data[split][ctx_size]}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
                     f.write(s)
 
 
@@ -395,7 +391,7 @@ if __name__ == '__main__':
         help="Example to start from.")
     parser.add_argument("--end", type=int, default=None,
         help="Example to end at.")
-    parser.add_argument("--split", type=str, required=True,
+    parser.add_argument("--split", type=str, default=None,
         help="Split: train / dev / test.")
     parser.add_argument("--annotations", type=str, default=None,
         help="Path to annotations for the games. If provided, training data will be generated using these annotations.")
@@ -414,10 +410,11 @@ if __name__ == '__main__':
 
     g = Generator(args)
 
-    logger.info(f"Processing {args.split} data")
-    games = load_games(args.templates, args.split)
-
+    
     if args.annotations is not None:
-        g.extract_annotated(games)
+        games = load_games(args.templates, "test")
+        g.extract_annotated(games, ctx_sizes)
     else:
+        logger.info(f"Processing {args.split} data")
+        games = load_games(args.templates, args.split)
         g.generate(games, args.split, ctx_sizes)

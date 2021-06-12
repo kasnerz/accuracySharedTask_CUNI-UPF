@@ -11,3 +11,8 @@ def random_choice_neq(l, neq_to):
         choice = random.choice(l)
         if choice != neq_to:
             return choice
+
+
+def normalize_tokens(tokens):
+    # a quote or backslash in the data may break the generated JSON
+    return [str(token).replace("\\", "").replace('"', r'\"') for token in tokens]

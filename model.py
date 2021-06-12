@@ -318,7 +318,7 @@ class ErrorCheckerInferenceModule:
         if beam_size > 1:
             predictions = self.beam_search_decoder(logits, beam_size)
             predictions = predictions[0][0].cpu().numpy()
-        else:    
+        else:
             predictions = np.argmax(logits.cpu().numpy(), axis=2)[0]
 
         id2label = Label.id2label()

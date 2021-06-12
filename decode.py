@@ -109,7 +109,7 @@ if __name__ == "__main__":
         help="Input directory.")
     parser.add_argument("--out_fname", default="out.csv", type=str,
         help="Output file.")
-    parser.add_argument("--ctx", type=int, default=15,
+    parser.add_argument("--ctx", type=int, default=None, required=True,
         help="Number of sentences retrieved for the context.")
     parser.add_argument("--experiment", type=str, required=True,
         help="Experiment name.")
@@ -121,7 +121,7 @@ if __name__ == "__main__":
         help="Beam size.")
     parser.add_argument("--gpus", default=1, type=int,
         help="Number of GPUs.")
-    parser.add_argument("--max_length", type=int, default=1024,
+    parser.add_argument("--max_length", type=int, default=512,
         help="Maximum number of tokens per example")
     parser.add_argument("--checkpoint", type=str, default="model.ckpt",
         help="Override the default checkpoint name 'model.ckpt'.")

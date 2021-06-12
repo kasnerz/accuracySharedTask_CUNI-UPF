@@ -32,9 +32,9 @@ if __name__ == "__main__":
         help="Beam size.")
     parser.add_argument("--gpus", default=1, type=int,
         help="Number of GPUs.")
-    parser.add_argument("--ctx", type=int, default=15,
+    parser.add_argument("--ctx", type=int, required=True,
         help="Number of sentences retrieved for the context.")
-    parser.add_argument("--max_length", type=int, default=1024,
+    parser.add_argument("--max_length", type=int, default=512,
         help="Maximum number of tokens per example")
     parser.add_argument("--checkpoint", type=str, default="model.ckpt",
         help="Override the default checkpoint name 'model.ckpt'.")
