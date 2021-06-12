@@ -11,10 +11,11 @@ import spacy, en_core_web_sm
 import csv
 
 from utils.json_encoder import CompactJSONEncoder
-from utils.config import Label
+from utils.utils import Label
 from utils.tokenizer import Tokenizer as Detokenizer
+from utils.tokenizer import normalize_tokens
 from utils.sentence_scorer import SentenceScorer
-from utils.utils import random_choice_neq, normalize_tokens
+from utils.utils import random_choice_neq
 
 from nltk import word_tokenize, sent_tokenize
 from num2words import num2words

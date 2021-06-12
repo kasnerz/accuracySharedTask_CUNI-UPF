@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-
+"""
+Postprocessing script for merging the subsequent annotated errors with the same type.
+This improves precision due to the way errors are "consumed" during evaluation.
+"""
 import csv
 import sys
 
 fname = sys.argv[1]
 
+
 def follows(anno_prev, anno):
+    """
+    Finds if two annotations can be merged.
+    """
     text_id1, sentence_id1, annotation_id1, tokens1, sent_token_start1, \
         sent_token_end1, doc_token_start1, doc_token_end1, type1, correction1, comment = anno_prev
 
@@ -20,6 +27,9 @@ def follows(anno_prev, anno):
          and type1 == type2
 
 def merge_annos(anno_grouped):
+    """
+    Merges subsequent annotations.
+    """
     # use the first anno
     new_anno = anno_grouped[0]
     # merge tokens
@@ -52,6 +62,7 @@ with open(fname) as f:
     merged_anno = merge_annos(anno_grouped)
     rows.append(merged_anno)
 
+# overwrites the original file in order not to create much mess
 with open(fname, "w") as f_out:
     writer = csv.writer(f_out, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
     for row in rows:

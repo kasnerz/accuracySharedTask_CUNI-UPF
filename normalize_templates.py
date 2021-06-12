@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-
+"""
+A script for fixing a few details in the generated templates.
+"""
 import re
 import os
 import glob

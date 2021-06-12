@@ -21,7 +21,7 @@ from collections import defaultdict
 from datasets import load_dataset, dataset_dict, Dataset
 
 from torch.nn.utils.rnn import pad_sequence
-from utils.config import Label
+from utils.utils import Label
 from collections import OrderedDict
 
 from transformers import (
@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 
 
 class ErrorCheckerDataModule(pl.LightningDataModule):
+    """
+    Pytorch Lightning data module
+    """
     def __init__(self, args, model_name=None):
         super().__init__()
         self.args = args
@@ -162,6 +165,9 @@ class ErrorCheckerDataModule(pl.LightningDataModule):
 
 
 class ErrorChecker(pl.LightningModule):
+    """
+    Pytorch Lightning module
+    """
     def __init__(self, args, **kwargs):
         super().__init__()
         self.args = args
@@ -263,6 +269,9 @@ class ErrorChecker(pl.LightningModule):
 
 
 class ErrorCheckerInferenceModule:
+    """
+    Class used for decoding and interactive inference, a wrapper on top of the ErrorChecker module 
+    """
     def __init__(self, args, model_path):
         self.args = args
         self.model = ErrorChecker.load_from_checkpoint(model_path)
@@ -274,6 +283,7 @@ class ErrorCheckerInferenceModule:
                                                        use_fast=True,
                                                        add_prefix_space=True)
         if hasattr(self.args, "gpus") and self.args.gpus > 0:
+            # TODO change "gpus" to boolean
             self.model.cuda()
         else:
             logger.warning("Not using GPU")
@@ -319,10 +329,12 @@ class ErrorCheckerInferenceModule:
             predictions = self.beam_search_decoder(logits, beam_size)
             predictions = predictions[0][0].cpu().numpy()
         else:
+            # note that beam search does not improve model predictions in the shared task
             predictions = np.argmax(logits.cpu().numpy(), axis=2)[0]
 
         id2label = Label.id2label()
 
+        # align labels to word boundaries
         offset_mapping = inputs["offset_mapping"][0]
         word_indices = [idx for idx, offset in enumerate(offset_mapping) if offset[0]==1]
         hyp_word_indices = word_indices[-len(hyp_tokens):]

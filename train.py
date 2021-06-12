@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+"""
+A script for running the training of the model.
+"""
 
 from model import ErrorChecker, ErrorCheckerDataModule
 

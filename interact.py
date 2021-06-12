@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+"""
+Command-line interactive mode for running the model.
+"""
 
 import argparse
 import logging
@@ -44,7 +47,6 @@ if __name__ == "__main__":
         help="Path to generated templates.")
 
     args = parser.parse_args()
-
     logger.info(args)
 
     torch.manual_seed(args.seed)
@@ -57,8 +59,10 @@ if __name__ == "__main__":
     game_idx = args.game_idx
 
     if game_idx is None:
+        # custom context
         text = input("[Text]: ")
     else:
+        # retrieve context automatically based on the game id
         ss = SentenceScorer()
         test_games = load_games(args.templates, "test")
         game_data = test_games[game_idx]
@@ -67,6 +71,7 @@ if __name__ == "__main__":
         hyp = input("[Hyp]: ")
 
         if game_idx is not None:
+            # print the automatically retrieved context
             text = ss.retrieve_ctx(hyp, game_data, cnt=args.ctx)
             print("[Text-R]:", text)
 

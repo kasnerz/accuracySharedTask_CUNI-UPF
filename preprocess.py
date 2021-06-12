@@ -14,6 +14,9 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 logger = logging.getLogger(__name__)
 
 class GameData:
+    """
+    Data structure for generated sentences about a single game
+    """
     def __init__(self):
         self.entities = defaultdict(list)
         self.teams = set()
@@ -36,6 +39,7 @@ class GameData:
         return [x[0] for x in self.texts if x[1] == category]
 
     def add_text(self, text, category):
+        # TODO remove
         entities = identify_entities(text)
 
         for entity in entities:
@@ -50,6 +54,7 @@ class GameData:
 
 
 def identify_entities(sent):
+    # TODO remove
     entity = []
 
     for token in sent.split():
@@ -62,12 +67,13 @@ def identify_entities(sent):
 
 
 def load_games(template_path, split="test"):
-    # TODO assign None to misgenerated games
+    """
+    Load the generated sentences from the text file into data structures
+    """
     games = []
     game_data = None
     category = None
     entity = None
-
     skipped_ids = []
     game_id = 0
 

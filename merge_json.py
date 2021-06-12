@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-
-
+"""
+Merge JSONs generated in parallel by generate.py
+"""
 import os
 import argparse
 import logging
@@ -28,7 +29,6 @@ if __name__ == '__main__':
             data += j["data"]
 
     with open(f"{args.outdir}/{args.prefix}.json", "w") as f:
-        # json.dump({"data" : data}, f, ensure_ascii=False)
         s = json.dumps({"data" : data}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
         f.write(s)
 

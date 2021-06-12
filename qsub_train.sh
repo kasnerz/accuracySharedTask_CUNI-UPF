@@ -29,13 +29,6 @@ EXPERIMENT_NAME=${EXPERIMENT/\//_}
 CMD="./train.py "
 CMD+="--dataset ${DATASET} "
 CMD+="--experiment ${EXPERIMENT} "
-# CMD+="--model_name ${MODEL_NAME} "
-# CMD+="--batch_size ${BATCH_SIZE} "
-# CMD+="--learning_rate ${LEARNING_RATE} "
-# CMD+="--checkpoint_name model${CHECKPOINT_SUFFIX} "
-# CMD+="--max_threads ${MAX_THREADS} "
-# CMD+="--max_length ${MAX_LENGTH} "
-# CMD+="--accumulate_grad_batches ${ACC_GRAD} "
 CMD+="--gpus ${GPUS} "
 
 # if [[ -n "${STEPS}" ]]; then
@@ -46,15 +39,9 @@ if [[ -n "${EPOCHS}" ]]; then
     CMD+="--max_epochs ${EPOCHS} "
 fi
 
-# run training without validation and save the last checkpoint with the correct model name
-# if [[ -n "${NO_VAL}" ]]; then
-#     CMD+="--check_val_every_n_epoch 10000 "
-# fi
-
 # start training with an existing model
 if [[ -n "${MODEL_PATH}" ]]; then
     CMD+="--model_path $MODEL_PATH "
-    #CMD+="--resume_training"
 fi
 
 qsub -q 'gpu*' -pe smp "${MAX_THREADS}" -l "mem_free=16G,gpu=${GPUS},gpu_ram=${GPU_RAM}G,hostname=*" -cwd -pty yes -j y -b y -o out -e out -N t_${EXPERIMENT_NAME}${CHECKPOINT_SUFFIX} $CMD

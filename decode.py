@@ -8,16 +8,14 @@ import re
 import torch
 import json
 import csv
-
 import pytorch_lightning as pl
 
 from pprint import pprint as pp
 from model import ErrorCheckerInferenceModule
 from nltk import sent_tokenize
-from utils.config import Label
+from utils.utils import Label
 from utils import tokenizer
 from utils.sentence_scorer import SentenceScorer
-
 
 from preprocess import load_games
 from generate import Generator
@@ -38,6 +36,9 @@ class Decoder:
 
 
     def process_input_file(self, row, test_games, f_out):
+        """
+        Produces annotations for a single game.
+        """
         file = row[0]
         test_idx = int(row[3])
         text = row[4]
@@ -63,6 +64,7 @@ class Decoder:
 
                 logger.info(f"{tag} {token}")
                 
+                # write an error annotation (need to be careful about indices starting from 1)
                 out_row = [
                     file + ".txt",
                     sent_idx+1,
@@ -81,24 +83,26 @@ class Decoder:
 
 
     def decode(self):
+        """
+        Produces error annotations for the games.csv file
+        """
         self.error_id = 0
         test_games = load_games(args.templates, "test")
         output_path = os.path.join(args.exp_dir, args.experiment, args.out_fname)
         
         with open(args.input_file) as f_in, open(output_path, "w") as f_out:
             reader = csv.reader(f_in, delimiter=',', quotechar='"')
-            # skip header
-            header = next(reader)
+            # skip header of games.csv
+            next(reader)
 
+            # write a submission header
             f_out.write(
                 '"TEXT_ID","SENTENCE_ID","ANNOTATION_ID","TOKENS","SENT_TOKEN_START",'
                 '"SENT_TOKEN_END","DOC_TOKEN_START","DOC_TOKEN_END","TYPE","CORRECTION","COMMENT"\n'
             )
-
             for row in reader:
+                # each game is in a separate file
                 self.process_input_file(row, test_games, f_out)
-                
-
 
 
 if __name__ == "__main__":
@@ -136,5 +140,4 @@ if __name__ == "__main__":
     torch.set_num_threads(args.max_threads)
 
     d = Decoder(args)
-
     d.decode()
