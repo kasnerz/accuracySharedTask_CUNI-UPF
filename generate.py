@@ -199,17 +199,12 @@ class Generator:
         current_entity_started = False
 
         self.ents_total_cnt += len(ne)
-        # # do not change more than half of entities to make sure that the modifications
-        # # are the least modifications necessary to make the sentence correct
-        # max_modified_ents = len(ne) // 2
-        # modified_ents_cnt = 0
 
         for i, token in enumerate(doc):
             if i in starts and random.random() < self.args.modification_rate:
                 # modify only a portion of named entities defined by the modification_rate argument
                 current_entity = ne[starts.index(i)]
                 current_entity_started = True
-                # modified_ents_cnt += 1
             elif i in ends:
                 current_entity = None
             if current_entity is None:
@@ -272,6 +267,7 @@ class Generator:
                         "sent" : modif_tokens,
                         "labels": modif_labels
                     }
+                    print(example)
                     data[ctx_size].append(example)
 
                 if len(data) > 0 and len(data) % 20 == 0:
@@ -372,10 +368,64 @@ class Generator:
                     f.write(s)
 
 
+
+    def get_stats_ents(self):
+        stats = defaultdict(int)
+
+        # the games from Rotowire are used for retrieving the context for the annotated errors
+        with open(self.args.annotations) as f_anno, open(self.args.games) as f_games:
+            reader_anno = csv.reader(f_anno, delimiter=',', quotechar='"')
+            reader_games = csv.reader(f_games, delimiter=',', quotechar='"')
+            # skip headers
+            next(reader_anno)
+            next(reader_games)
+
+            current_anno = next(reader_anno)
+
+            for i, row in enumerate(reader_games):
+                game_id = row[0]
+                rotowire_game_id = int(row[3])
+                sentences = sent_tokenize(row[4])
+
+                logger.info(f"Processing game {game_id}")
+
+                for j, sent in enumerate(sentences):
+                    sent_detok = self.detokenizer.detokenize(sent)
+                    doc = self.spacy_nlp(sent_detok)
+                    nes = [(ent.text, 
+                           ent.label_, 
+                           ent.start, 
+                           ent.end, 
+                           [doc[i] for i in range(ent.start, ent.end)]) for ent in doc.ents]
+
+                    for ne in nes:
+                        if ne[1] in ["ORG", "FAC", "DATE", "PERSON", "GPE"]:
+                            stats["name_ents"] += 1
+                        elif ne[1] in ["CARDINAL", "ORDINAL"]:
+                            stats["number_ents"] += 1
+
+                    while True:
+                        # process annotations until either the game id or the sentence id changes
+                        if game_id != current_anno[0][:4] or int(current_anno[1])-1 != j:
+                            break
+                        error_type = Label[current_anno[8]].name
+                        stats[error_type] += 1
+                        try:
+                            current_anno = next(reader_anno)
+                        except StopIteration:
+                            break
+
+        print(stats)
+        name_ents, number_ents, name, number = [stats[key] for key in ["name_ents", "number_ents", "NAME", "NUMBER"]]
+        print(f"Ratio NAME: {name}/{name_ents} ({name/name_ents})")
+        print(f"Ratio NUMBER: {number}/{number_ents} ({number/number_ents})")
+        
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--templates", type=str, default="generated/simple_templates",
-        help="Path to generated templates.")
+    parser.add_argument("--templates", type=str, default=None,
+        help="Type of templates (simple / compact).")
     parser.add_argument("--rotowire_dir", type=str, default="../../datasets/rotowire",
         help="Path to data.")
     parser.add_argument("--data_dir", type=str, default="data",
@@ -398,6 +448,8 @@ if __name__ == '__main__':
         help="Path to annotations for the games. If provided, training data will be generated using these annotations.")
     parser.add_argument("--games", default="games.csv", type=str,
         help="File with the games for the task.")
+    parser.add_argument("--get_stats_ents", action="store_true",
+        help="Only compute statistics for entities.")
 
     args = parser.parse_args()
 
@@ -409,13 +461,16 @@ if __name__ == '__main__':
     for ctx_size in ctx_sizes:
         os.makedirs(os.path.join(args.data_dir, args.output + f"_ctx{ctx_size}"), exist_ok=True)
 
+    templates_path = f"./context/{args.templates}"
     g = Generator(args)
 
-    
-    if args.annotations is not None:
-        games = load_games(args.templates, "test")
-        g.extract_annotated(games, ctx_sizes)
+    if args.get_stats_ents:
+        g.get_stats_ents()
     else:
-        logger.info(f"Processing {args.split} data")
-        games = load_games(args.templates, args.split)
-        g.generate(games, args.split, ctx_sizes)
+        if args.annotations is not None:
+            games = load_games(templates_path, "test")
+            g.extract_annotated(games, ctx_sizes)
+        else:
+            logger.info(f"Processing {args.split} data")
+            games = load_games(templates_path, args.split)
+            g.generate(games, args.split, ctx_sizes)

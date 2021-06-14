@@ -8,7 +8,7 @@ import random
 import re
 
 from collections import defaultdict
-
+from utils.rotowire import Rotowire
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -17,17 +17,13 @@ class GameData:
     """
     Data structure for generated sentences about a single game
     """
-    def __init__(self):
-        self.entities = defaultdict(list)
-        self.teams = set()
-        self.players = set()
+    def __init__(self, game_id, rotowire):
+        self.teams = rotowire.get_teams(game_id)
+        self.players = rotowire.get_players(game_id)
         self.texts = []
 
     def get_all(self):
-        return [x[0] for x in self.texts]
-
-    def get_entity(self, entity):
-        return self.entities[entity]
+        return self.texts
 
     def get_teams(self):
         return self.teams
@@ -35,51 +31,29 @@ class GameData:
     def get_players(self):
         return self.players
 
-    def get_category(self, category):
-        return [x[0] for x in self.texts if x[1] == category]
-
-    def add_text(self, text, category):
-        # TODO remove
-        entities = identify_entities(text)
-
-        for entity in entities:
-            self.entities[entity].append(text)
-
-            if category in ["game", "team"]:
-                self.teams.add(entity)
-            elif category == "player":
-                self.players.add(entity)
-
-        self.texts.append((text, category))
+    def add_text(self, text):
+        self.texts.append(text)
 
 
-def identify_entities(sent):
-    # TODO remove
-    entity = []
-
-    for token in sent.split():
-        if token[0].isupper():
-            entity.append(token)
-        else:
-            break
-
-    return [" ".join(entity)]
-
-
-def load_games(template_path, split="test"):
+def load_games(template_path, split="test", normalize=True):
     """
     Load the generated sentences from the text file into data structures
     """
     games = []
     game_data = None
-    category = None
-    entity = None
     skipped_ids = []
     game_id = 0
+    rotowire = Rotowire(split)
 
-    with open(template_path + f"/log_{split}.txt") as f:
+    with open(template_path + f"/{split}.txt") as f:
         for line in f.readlines():
             line = line.rstrip("\n")
+
+            if normalize:
+                line = re.sub(r"(\d+)-(\d+)", r"\1 - \2", line)
+                line = re.sub(r"(\d+)%", r"\1 percent", line)
+                line = re.sub(r"(\s)\s+", r"\1", line)
+
             skipped_id = re.search(r"Input #(\d+) not processed", line)
 
             if line.startswith("=== Game"):
@@ -88,30 +62,25 @@ def load_games(template_path, split="test"):
                     game_id += 1
 
                     while game_id in skipped_ids:
-                        logger.info(f"Game id {game_id} does not exist")
+                        logger.info(f"Game id {game_id} skipped")
                         games.append(None)
                         game_id += 1
-                game_data = GameData()
-            elif "Game Data" in line:
-                category = "game"
-            elif "Player Data" in line:
-                category = "player"
-            elif "Team Data" in line:
-                category = "team"
+                game_data = GameData(game_id, rotowire)
             elif skipped_id is not None:
                 skipped_ids.append(int(skipped_id.group(1)))
-            elif line == "" or category is None:
+            elif line == "" or not game_data or re.search(r"(Game|Player|Team) Data", line):
                 continue
             else:
-                game_data.add_text(line, category)
+                game_data.add_text(line)
 
     games.append(game_data)
+
     return games
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--templates", type=str, default="generated/simple_templates",
+    parser.add_argument("--templates", type=str, default=None,
         help="Path to generated templates.")
     args = parser.parse_args()
 

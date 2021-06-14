@@ -11,7 +11,7 @@ class SentenceScorer:
     """
     def __init__(self):
         self.model = SentenceTransformer('paraphrase-distilroberta-base-v2')
-        self.model.cuda()
+        # self.model.cuda()
 
     def score(self, texts, sentence):
         emb_texts = self.model.encode(texts, convert_to_tensor=True, show_progress_bar=False)
@@ -25,7 +25,7 @@ class SentenceScorer:
 
         return scored_sentences
 
-    def retrieve_ctx_scored(self, sentence, game_data, cnt):
+    def retrieve_ctx_scored(self, sentence, game_data, cnt, force_digits=True):
         """
         Returns a list of tuples (sentence, sim_score)
         """
