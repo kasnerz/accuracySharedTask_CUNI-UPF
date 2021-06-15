@@ -423,7 +423,7 @@ class Generator:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--templates", type=str, default=None,
+    parser.add_argument("--templates", type=str, required=True,
         help="Type of templates (simple / compact).")
     parser.add_argument("--rotowire_dir", type=str, default="../../datasets/rotowire",
         help="Path to data.")
