@@ -20,7 +20,7 @@ if __name__ == '__main__':
         help="Prefix to merge.")
     args = parser.parse_args()
 
-    files = glob.glob(f"{args.dir}/{args.prefix}*.json")
+    files = glob.glob(f"{args.dir}/{args.prefix}-*.json")
     data = []
 
     for filename in files:

@@ -87,7 +87,9 @@ class Decoder:
         Produces error annotations for the games.csv file
         """
         self.error_id = 0
-        test_games = load_games(args.templates, "test")
+        templates_path = f"./context/{args.templates}"
+
+        test_games = load_games(templates_path, "test")
         output_path = os.path.join(args.exp_dir, args.experiment, args.out_fname)
         
         with open(args.input_file) as f_in, open(output_path, "w") as f_out:
@@ -129,8 +131,8 @@ if __name__ == "__main__":
         help="Maximum number of tokens per example")
     parser.add_argument("--checkpoint", type=str, default="model.ckpt",
         help="Override the default checkpoint name 'model.ckpt'.")
-    parser.add_argument("--templates", type=str, default="generated/simple_templates",
-        help="Path to generated templates.")
+    parser.add_argument("--templates", type=str, default=None,
+        help="Type of templates (simple / compact).")
     args = parser.parse_args()
 
     logger.info(args)

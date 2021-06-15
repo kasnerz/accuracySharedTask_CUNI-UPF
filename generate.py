@@ -267,10 +267,9 @@ class Generator:
                         "sent" : modif_tokens,
                         "labels": modif_labels
                     }
-                    print(example)
                     data[ctx_size].append(example)
 
-                if len(data) > 0 and len(data) % 20 == 0:
+                if len(data) > 0 and len(data[ctx_sizes[0]]) % 20 == 0:
                     logger.info(f"{len(data)} examples generated (game id {game_id}).")
 
         out_fname = f"{split}.json"

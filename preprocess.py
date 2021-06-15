@@ -51,6 +51,7 @@ def load_games(template_path, split="test", normalize=True):
 
             if normalize:
                 line = re.sub(r"(\d+)-(\d+)", r"\1 - \2", line)
+                line = re.sub(r"(\d+)/(\d+)", r"\1 / \2", line)
                 line = re.sub(r"(\d+)%", r"\1 percent", line)
                 line = re.sub(r"(\s)\s+", r"\1", line)
 
