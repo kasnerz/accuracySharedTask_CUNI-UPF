@@ -334,12 +334,37 @@ class ErrorCheckerInferenceModule:
 
         id2label = Label.id2label()
 
-        # align labels to word boundaries
-        offset_mapping = inputs["offset_mapping"][0]
-        word_indices = [idx for idx, offset in enumerate(offset_mapping) if offset[0]==1]
-        hyp_word_indices = word_indices[-len(hyp_tokens):]
-        hyp_labels = predictions[hyp_word_indices]
+
+
+        word_ids = inputs.word_ids()
+        hyp_start_idx = [idx for idx, x in enumerate(word_ids) if x == None][2]
+        hyp_word_ids = word_ids[hyp_start_idx+1:-1]
+        hyp_subword_labels = predictions[hyp_start_idx+1:-1]
+        hyp_labels = []
+
+        for i, (label, word_id) in enumerate(zip(hyp_subword_labels, hyp_word_ids)):
+            if i > 0 and hyp_word_ids[i-1] == word_id:
+                continue
+            hyp_labels.append(label)
+
         hyp_tagged_tokens = [(token, id2label[label]) for token, label in zip(hyp_tokens, hyp_labels)]
+
+        # # align labels to word boundaries
+        # offset_mapping = inputs["offset_mapping"][0]
+        # word_indices = [idx for idx, offset in enumerate(offset_mapping) if offset[0]==1]
+        # hyp_word_indices = word_indices[-len(hyp_tokens):]
+        # hyp_labels = predictions[hyp_word_indices]
+        # hyp_tagged_tokens = [(token, id2label[label]) for token, label in zip(hyp_tokens, hyp_labels)]
+
+
+        # from pprint import pprint as pp
+        # a = [self.tokenizer.decode(x) for x in inputs["input_ids"][0]]
+
+        # words = []
+
+        # # for subword, offset in zip(a, offset_mapping):
+        #     # words.append(subword[])
+        # pp(list(zip([x for x in list(zip(a, predictions, offset_mapping)) if x[2][0]==1][-len(hyp_tokens):], hyp_tokens))) 
 
         return hyp_tagged_tokens
 

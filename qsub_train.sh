@@ -44,4 +44,4 @@ if [[ -n "${MODEL_PATH}" ]]; then
     CMD+="--model_path $MODEL_PATH "
 fi
 
-qsub -q 'gpu*' -pe smp "${MAX_THREADS}" -l "mem_free=16G,gpu=${GPUS},gpu_ram=${GPU_RAM}G,hostname=*" -cwd -pty yes -j y -b y -o out -e out -N t_${EXPERIMENT_NAME}${CHECKPOINT_SUFFIX} $CMD
+qsub -q 'gpu*' -pe smp "${MAX_THREADS}" -l "mem_free=16G,gpu=${GPUS},gpu_ram=${GPU_RAM}G,hostname=*" -p -1000 -cwd -pty yes -j y -b y -o out -e out -N t_${EXPERIMENT_NAME}${CHECKPOINT_SUFFIX} $CMD

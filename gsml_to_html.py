@@ -89,6 +89,7 @@ def main(text_dir, gsml_csv, out_csv, games_csv):
         text = texts[text_id].split()
         annots = gsml[gsml['TEXT_ID'] == text_id].to_dict('records')
         annots_out = out[out['TEXT_ID'] == text_id].to_dict('records')
+        
         game = games[games['TEXT_ID'] == text_id[:-4]].to_dict('records')[0]
 
         annots_per_token = [[None, None] for _ in range(len(text))]

@@ -262,6 +262,8 @@ class Generator:
                     ctx_tokens = [str(token).replace("%", "percent").replace("\\","") for token in ctx_tokens]
                     modif_tokens = [str(token).replace("%", "percent").replace("\\","") for token in modif_tokens]
 
+                    assert len(modif_tokens) == len(modif_labels)
+
                     example = {
                         "ctx" : ctx_tokens,
                         "sent" : modif_tokens,
@@ -284,16 +286,42 @@ class Generator:
                 s = json.dumps({"data" : data[ctx_size]}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
                 f.write(s)
 
+    def get_xval_splits(self, data, x):
+        xval_splits = {s : [] for s in ["train", "dev", "test"]}
+
+        test_size = len(data) // self.args.xval_splits
+        dev_size = (len(data) // self.args.xval_splits) // 2
+        train_size = len(data) - test_size - dev_size
+
+        test_range = range(x*test_size, x*test_size+test_size)
+
+        if x != self.args.xval_splits-1:
+            dev_range = range(x*test_size+test_size, x*test_size+test_size+dev_size)
+        else:
+            dev_range = range(0, dev_size)
+
+        # print("test: ", list(test_range))
+        # print("dev: ", list(dev_range))
+
+        for i in range(len(data)):
+            if i in test_range:
+                xval_splits["test"].append(data[i])
+            elif i in dev_range:
+                xval_splits["dev"].append(data[i])
+            else:
+                xval_splits["train"].append(data[i])
+
+        return xval_splits
 
     def extract_annotated(self, games, ctx_sizes):
         """
         Generate training data from the annotated data for the task.
         """
-        splits = ["train", "dev", "test"]
-        data = {
-            split : {ctx_size : [] for ctx_size in ctx_sizes}
-                for split in splits
-        }
+        if not self.args.xval_splits:
+            logger.info("No xval_splits, test set will not be generated.")
+
+        data = {ctx_size : [] for ctx_size in ctx_sizes}
+
         # the games from Rotowire are used for retrieving the context for the annotated errors
         with open(self.args.annotations) as f_anno, open(self.args.games) as f_games:
             reader_anno = csv.reader(f_anno, delimiter=',', quotechar='"')
@@ -305,13 +333,6 @@ class Generator:
             current_anno = next(reader_anno)
 
             for i, row in enumerate(reader_games):
-                if i < 10:
-                    split = "test"
-                elif i < 55:
-                    split = "train"
-                else:
-                    split = "dev"
-
                 game_id = row[0]
                 rotowire_game_id = int(row[3])
                 sentences = sent_tokenize(row[4])
@@ -347,6 +368,8 @@ class Generator:
                     for ctx_size in ctx_sizes:
                         ctx = " ".join([x[0] for x in ctx_scored[:ctx_size]])
                         ctx_tokens = normalize_tokens(word_tokenize(ctx))
+                            
+                        assert len(sent_tokens) == len(sent_labels)
                         
                         example = {
                             "ctx" : ctx_tokens,
@@ -354,17 +377,37 @@ class Generator:
                             "labels": sent_labels
                         }
                         if i % 5 == 0 and j == 0:
-                            logger.info(example)
+                            logger.debug(example)
 
-                        data[split][ctx_size].append(example)
-                        
-        for split in splits:
-            out_fname = f"{split}.json"
+                        data[ctx_size].append(example)
+        
 
+        if self.args.xval_splits:
             for ctx_size in ctx_sizes:
-                with open(os.path.join(self.args.data_dir, self.args.output + f"_ctx{ctx_size}", out_fname), "w") as f:
-                    s = json.dumps({"data" : data[split][ctx_size]}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
+                for x in range(self.args.xval_splits):
+                    data_splits = self.get_xval_splits(data[ctx_size], x)
+
+                    for split_name, data_split in data_splits.items(): 
+                        out_fname = f"{split_name}.json"
+
+                        with open(os.path.join(self.args.data_dir, self.args.output + f"_ctx{ctx_size}", f"{x}", out_fname), "w") as f:
+                            s = json.dumps({"data" : data_split}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
+                            f.write(s)
+        else:
+            for ctx_size in ctx_sizes:
+                dev_size = int(len(data[ctx_size])/10)
+                logger.info(f"Dev size for ctx {ctx_size}: {dev_size}")
+                dev_split = data[ctx_size][:dev_size]
+                train_split = data[ctx_size][dev_size:]
+
+                with open(os.path.join(self.args.data_dir, self.args.output + f"_ctx{ctx_size}", "train.json"), "w") as f:
+                    s = json.dumps({"data" : train_split}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
                     f.write(s)
+
+                with open(os.path.join(self.args.data_dir, self.args.output + f"_ctx{ctx_size}", "dev.json"), "w") as f:
+                    s = json.dumps({"data" : dev_split}, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
+                    f.write(s)
+
 
 
 
@@ -449,6 +492,8 @@ if __name__ == '__main__':
         help="File with the games for the task.")
     parser.add_argument("--get_stats_ents", action="store_true",
         help="Only compute statistics for entities.")
+    parser.add_argument("--xval_splits", type=int, default=None,
+        help="Number of splits for cross-validation.")
 
     args = parser.parse_args()
 
@@ -458,7 +503,11 @@ if __name__ == '__main__':
     ctx_sizes = [args.ctx] if args.ctx is not None else [5, 10, 20, 40]
 
     for ctx_size in ctx_sizes:
-        os.makedirs(os.path.join(args.data_dir, args.output + f"_ctx{ctx_size}"), exist_ok=True)
+        if args.xval_splits:
+            for x in range(args.xval_splits):
+                os.makedirs(os.path.join(args.data_dir, args.output + f"_ctx{ctx_size}", f"{x}"), exist_ok=True)
+        else:
+            os.makedirs(os.path.join(args.data_dir, args.output + f"_ctx{ctx_size}"), exist_ok=True)
 
     templates_path = f"./context/{args.templates}"
     g = Generator(args)

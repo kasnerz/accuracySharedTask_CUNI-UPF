@@ -43,8 +43,10 @@ if __name__ == "__main__":
         help="Override the default checkpoint name 'model.ckpt'.")
     parser.add_argument("--game_idx", default=None, type=int,
         help="Retrieve the references automatically from game_id.")
-    parser.add_argument("--templates", type=str, default="generated/simple_templates",
-        help="Path to generated templates.")
+    parser.add_argument("--templates", type=str, default=None,
+        help="Type of templates (simple / compact).")
+    parser.add_argument("--is_tokenized", action="store_true",
+        help="Input is tokenized, split on spaces.")
 
     args = parser.parse_args()
     logger.info(args)
@@ -56,6 +58,7 @@ if __name__ == "__main__":
     model_path = os.path.join(args.exp_dir, args.experiment, args.checkpoint)
     ecim = ErrorCheckerInferenceModule(args, model_path=model_path)
 
+    templates_path = f"./context/{args.templates}"
     game_idx = args.game_idx
 
     if game_idx is None:
@@ -64,7 +67,7 @@ if __name__ == "__main__":
     else:
         # retrieve context automatically based on the game id
         ss = SentenceScorer()
-        test_games = load_games(args.templates, "test")
+        test_games = load_games(templates_path, "test")
         game_data = test_games[game_idx]
 
     while True:
@@ -75,7 +78,7 @@ if __name__ == "__main__":
             text = ss.retrieve_ctx(hyp, game_data, cnt=args.ctx)
             print("[Text-R]:", text)
 
-        out = ecim.predict(text=text, hyp=hyp, beam_size=args.beam_size)
+        out = ecim.predict(text=text, hyp=hyp, beam_size=args.beam_size, is_hyp_tokenized=args.is_tokenized)
         print("[Out]:")
         pp(out)
         print("============")

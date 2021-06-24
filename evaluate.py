@@ -48,7 +48,7 @@ def consistent_tokenization(tokenization_mode, current_line_mode):
     - START_IDX, MISTAKE_DATA
   The function returns a tuple where the first element is the dict, and the second is num_mistakes
 """
-def create_mistake_dict(filename, categories, token_lookup, n_games_only=None):
+def create_mistake_dict(filename, categories, token_lookup, n_games_only=None, xval_range=None):
   mistake_dict = {}
   tokens_used = {}
   matches = 0
@@ -72,8 +72,13 @@ def create_mistake_dict(filename, categories, token_lookup, n_games_only=None):
       doc_end_idx     = csv_int(row[7])
       category        = row[8]
 
-      if n_games_only and text_id == f"S{n_games_only+1:03d}":
+      game_id = int(text_id[1:])-1
+
+      if n_games_only and game_id == n_games_only:
         break
+
+      elif xval_range and game_id not in xval_range:
+        continue
 
       # Check the sanity of the token submissions
       sent_given = (sent_start_idx != None and sent_end_idx != None and sentence_id != None)
@@ -235,9 +240,9 @@ def safe_divide(x, y):
   Takes as input dicts created with match_mistake_dicts(), plus a list of categories
   Only the categories given will be checked.
 """
-def calculate_recall_and_precision(gsml_filename, submitted_filename, token_lookup, categories=[], n_games_only=None):
-  gsml, gsml_num_lines = create_mistake_dict(gsml_filename, categories, token_lookup, n_games_only)
-  submitted, submitted_num_lines = create_mistake_dict(submitted_filename, categories, token_lookup, n_games_only)
+def calculate_recall_and_precision(gsml_filename, submitted_filename, token_lookup, categories=[], n_games_only=None, xval_range=None):
+  gsml, gsml_num_lines = create_mistake_dict(gsml_filename, categories, token_lookup, n_games_only, xval_range)
+  submitted, submitted_num_lines = create_mistake_dict(submitted_filename, categories, token_lookup, n_games_only, xval_range)
 
   # Mistake level
   per_category_matches = match_mistake_dicts(gsml, submitted)
@@ -304,6 +309,9 @@ parser.add_argument('--token_lookup', type=str,
 parser.add_argument('--n_games_only', type=int, default=None,
                     help='Evaluate only on first N games (e.g. in case other games were used as training data)')
 
+parser.add_argument('--avg_xval', type=int, default=None,
+                    help='Average runs for cross-validations')
+
 args = parser.parse_args()
 gsml_filename = args.gsml
 submitted_filename = args.submitted
@@ -312,9 +320,9 @@ token_lookup_filename = args.token_lookup
 with open(token_lookup_filename, 'r') as fh:
   token_lookup = yaml.full_load(fh)
 
-print('\n\n')
-print('-' * 80)
-print('GSML: EVALUATE')
+# print('\n\n')
+# print('-' * 80)
+# print('GSML: EVALUATE')
 print(f'comparing GSML => "{gsml_filename}" to submission => "{submitted_filename}"')
 
 # Check all catogories combined, as well as each category individually
@@ -328,10 +336,22 @@ for categories in categories_list:
   category_display_str = ', '.join(categories)
   # print(f'\n\t-- GSML for categories: [{category_display_str}]')
 
-  result = calculate_recall_and_precision(gsml_filename, submitted_filename, token_lookup, categories, n_games_only=args.n_games_only)
+  if args.avg_xval:
+    avgs = {m : [] for m in metrics}
 
-  for m in metrics:
-    res_to_print[m].append(result[m]['value'])
+    for x in range(args.avg_xval):
+      submitted_filename_x = submitted_filename.replace("/out.csv", f"_x{x}/out.csv")
+      result = calculate_recall_and_precision(gsml_filename, submitted_filename_x, token_lookup, categories, xval_range=range(x*10, x*10+10))
+
+      for m in metrics:
+        avgs[m].append(result[m]['value'] or 0.)
+
+    for m in metrics:
+      res_to_print[m].append(sum(avgs[m]) / len(avgs[m]))
+  else:
+    result = calculate_recall_and_precision(gsml_filename, submitted_filename, token_lookup, categories, n_games_only=args.n_games_only)
+    for m in metrics:
+      res_to_print[m].append(result[m]['value'])
 
   # recall = format_result_value(result['recall']['value'])
   # precision = format_result_value(result['precision']['value'])
@@ -346,14 +366,10 @@ for categories in categories_list:
   #   for sub_k, sub_v in v.items():
   #     print(f'\t\t\t{sub_k} => {sub_v}')
 
-
-
 for m in metrics:
   print(m, end="")
-
   for val in res_to_print[m]:
     val = val if val else 0.
-
     print(f",{val:.3f}", end="")
 
   print()

@@ -25,7 +25,7 @@ class SentenceScorer:
 
         return scored_sentences
 
-    def retrieve_ctx_scored(self, sentence, game_data, cnt, force_digits=True):
+    def retrieve_ctx_scored(self, sentence, game_data, cnt):
         """
         Returns a list of tuples (sentence, sim_score)
         """
