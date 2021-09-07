@@ -1,0 +1,15 @@
+setuptools
+wheel
+numpy==1.19.5
+cython==0.29.24
+scipy==1.2.1
+torch==1.7.1
+transformers==4.3.3
+nltk==3.5
+pytorch-lightning==1.4.5
+datasets==1.5.0
+num2words==0.5.10
+text2num==2.3.0
+sacremoses==0.0.43
+sentence-transformers==1.2.0
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.0.0/en_core_web_sm-3.0.0-py3-none-any.whl 

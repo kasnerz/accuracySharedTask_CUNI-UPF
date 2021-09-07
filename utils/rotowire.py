@@ -2,11 +2,10 @@
 
 import json
 import os
-
-rotowire_dir = "/lnet/work/people/kasner/datasets/rotowire"
+import argparse
 
 class Rotowire:
-    def __init__(self, split):
+    def __init__(self, rotowire_dir, split):
         with open(os.path.join(rotowire_dir, f"{split}.json")) as f:
             self.games = json.load(f)
 
@@ -39,6 +38,11 @@ def extract_cities(j):
 
     
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rotowire_dir", type=str, required=True,
+        help="Path to the original Rotowire dataset.")
+    args = parser.parse_args()
+
     with open(os.path.join(rotowire_dir, "train.json")) as f:
         j = json.load(f)
 

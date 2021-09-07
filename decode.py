@@ -89,7 +89,7 @@ class Decoder:
         self.error_id = 0
         templates_path = f"./context/{args.templates}"
 
-        test_games = load_games(templates_path, "test")
+        test_games = load_games(templates_path, rotowire_dir=self.args.rotowire_dir, split="test")
         output_path = os.path.join(args.exp_dir, args.experiment, args.out_fname)
         
         with open(args.input_file) as f_in, open(output_path, "w") as f_out:
@@ -133,6 +133,8 @@ if __name__ == "__main__":
         help="Override the default checkpoint name 'model.ckpt'.")
     parser.add_argument("--templates", type=str, default=None,
         help="Type of templates (simple / compact).")
+    parser.add_argument("--rotowire_dir", type=str, default="rotowire",
+        help="Path to the original Rotowire dataset.")
     args = parser.parse_args()
 
     logger.info(args)

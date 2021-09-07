@@ -11,7 +11,6 @@ class SentenceScorer:
     """
     def __init__(self):
         self.model = SentenceTransformer('paraphrase-distilroberta-base-v2')
-        # self.model.cuda()
 
     def score(self, texts, sentence):
         emb_texts = self.model.encode(texts, convert_to_tensor=True, show_progress_bar=False)

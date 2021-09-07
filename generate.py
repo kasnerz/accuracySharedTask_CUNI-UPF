@@ -38,7 +38,7 @@ class Generator:
         self.spacy_nlp = en_core_web_sm.load()
         self.cities = self.load_cities()
         self.days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        self.ents_total_cnt = 0
+        self.ents_total_cnt = 0         # stats of modified entities
         self.ents_total_mod_cnt = 0
         self.rotowire = defaultdict(None)
         self.ss = SentenceScorer()
@@ -50,7 +50,8 @@ class Generator:
 
     def load_cities(self):
         """
-        Load the list of team cities extracted from the Rotowire dataset
+        Load the list of team cities extracted from the Rotowire dataset.
+        The cities are used for adding noise to the texts. 
         """
         cities = []
         with open("cities.txt") as f:
@@ -468,7 +469,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--templates", type=str, required=True,
         help="Type of templates (simple / compact).")
-    parser.add_argument("--rotowire_dir", type=str, default="../../datasets/rotowire",
+    parser.add_argument("--rotowire_dir", type=str, default="rotowire",
         help="Path to data.")
     parser.add_argument("--data_dir", type=str, default="data",
         help="Path to data.")
@@ -516,9 +517,10 @@ if __name__ == '__main__':
         g.get_stats_ents()
     else:
         if args.annotations is not None:
-            games = load_games(templates_path, "test")
+            games = load_games(templates_path, rotowire_dir=args.rotowire_dir, split="test")
             g.extract_annotated(games, ctx_sizes)
         else:
             logger.info(f"Processing {args.split} data")
-            games = load_games(templates_path, args.split)
+            
+            games = load_games(templates_path, rotowire_dir=args.rotowire_dir, split=args.split)
             g.generate(games, args.split, ctx_sizes)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Postprocessing script for merging the subsequent annotated errors with the same type.
-This improves precision due to the way errors are "consumed" during evaluation.
+This improves precision due to the way errors are "consumed" during evaluation (see README in the shared task repo).
 """
 import csv
 import sys
@@ -40,7 +40,6 @@ def merge_annos(anno_grouped):
 
     return new_anno
 
-
 rows = []
 
 with open(fname) as f:
@@ -62,7 +61,7 @@ with open(fname) as f:
     merged_anno = merge_annos(anno_grouped)
     rows.append(merged_anno)
 
-# overwrites the original file in order not to create much mess
+# overwrites the original file
 with open(fname, "w") as f_out:
     writer = csv.writer(f_out, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
     for row in rows:

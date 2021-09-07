@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-A script for running the training of the model.
+A script for running the model training.
 """
 
 from model import ErrorChecker, ErrorCheckerDataModule

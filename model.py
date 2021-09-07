@@ -12,7 +12,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import random
-import sacrebleu
 
 from nltk import word_tokenize
 from torch.utils.data import DataLoader, Dataset

@@ -4,7 +4,7 @@ from enum import Enum
 
 class Label(Enum):
     """
-    Labels which correspond to annotation tags as defined by the task
+    Label which corresponds to annotation tags as defined by the task
     """
     O = 0           # OK
     NUMBER = 1      

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class GameData:
     """
-    Data structure for generated sentences about a single game
+    Data structure for generated sentences about a game
     """
     def __init__(self, game_id, rotowire):
         self.teams = rotowire.get_teams(game_id)
@@ -35,7 +35,7 @@ class GameData:
         self.texts.append(text)
 
 
-def load_games(template_path, split="test", normalize=True):
+def load_games(template_path, rotowire_dir, split="test", normalize=True):
     """
     Load the generated sentences from the text file into data structures
     """
@@ -43,18 +43,23 @@ def load_games(template_path, split="test", normalize=True):
     game_data = None
     skipped_ids = []
     game_id = 0
-    rotowire = Rotowire(split)
+    rotowire = Rotowire(rotowire_dir, split)
 
     with open(template_path + f"/{split}.txt") as f:
         for line in f.readlines():
             line = line.rstrip("\n")
 
             if normalize:
+                # spaces around a dash
                 line = re.sub(r"(\d+)-(\d+)", r"\1 - \2", line)
+                # spaces around a slash
                 line = re.sub(r"(\d+)/(\d+)", r"\1 / \2", line)
+                # % -> percent
                 line = re.sub(r"(\d+)%", r"\1 percent", line)
+                # only single spaces
                 line = re.sub(r"(\s)\s+", r"\1", line)
 
+            # for some games, an output could not be generated -> skip
             skipped_id = re.search(r"Input #(\d+) not processed", line)
 
             if line.startswith("=== Game"):
@@ -81,9 +86,11 @@ def load_games(template_path, split="test", normalize=True):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--templates", type=str, default=None,
+    parser.add_argument("--templates", type=str, required=True,
         help="Path to generated templates.")
+    parser.add_argument("--rotowire_dir", type=str, default="rotowire",
+        help="Path to the original Rotowire dataset.")
     args = parser.parse_args()
 
-    games = load_games(args.templates)
+    games = load_games(args.templates, rotowire_dir=rotowire_dir)
 

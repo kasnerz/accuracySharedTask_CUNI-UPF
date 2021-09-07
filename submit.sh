@@ -142,5 +142,5 @@ done
 for FILE in submit/*.csv; do 
     echo $FILE
     OUT_HTML=`basename $FILE .csv`
-    ./gsml_to_html.py test/texts $FILE $FILE test/games.csv > submit/html/$OUT_HTML.html
+    ./utils/gsml_to_html.py test/texts $FILE $FILE test/games.csv > submit/html/$OUT_HTML.html
 done
