@@ -225,4 +225,18 @@ Colors:
 - **purple**: error category is identified incorrectly
 
 ## Citation
-TBD once the paper is published
+```
+@inproceedings{kasner-etal-2021-text,
+    title = "Text-in-Context: Token-Level Error Detection for Table-to-Text Generation",
+    author = "Kasner, Zden{\v{e}}k  and
+      Mille, Simon  and
+      Du{\v{s}}ek, Ond{\v{r}}ej",
+    booktitle = "Proceedings of the 14th International Conference on Natural Language Generation",
+    month = aug,
+    year = "2021",
+    address = "Aberdeen, Scotland, UK",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2021.inlg-1.25",
+    pages = "259--265"
+}
+```
