@@ -7,7 +7,7 @@ The code allows to train, evaluate, and run the models for **automatic token-lev
 
 For the detailed description of our system, please refer to:
 
- > Zdeněk Kasner, Simon Mille & Ondřej Dušek (2021): [Text-in-Context: Token-Level Error Detection for Table-to-Text Generation](http://ufallab.ms.mff.cuni.cz/~kasner/papers/2021_text_in_context.pdf) In: *Proceedings of the 14th International Conference on Natural Language Generation (INLG 2021)*.
+ > Zdeněk Kasner, Simon Mille & Ondřej Dušek (2021): [Text-in-Context: Token-Level Error Detection for Table-to-Text Generation](https://aclanthology.org/2021.inlg-1.25.pdf) In: *Proceedings of the 14th International Conference on Natural Language Generation (INLG 2021)*.
 
 ## Quickstart
 If you want to quickly try out the trained model using a command-line interface, follow these steps:
